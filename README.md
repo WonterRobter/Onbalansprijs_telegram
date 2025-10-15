@@ -86,14 +86,16 @@ Je kunt de bot automatisch starten na elke reboot met een systemd-service:
    Wants=network-online.target
 
    [Service]
-   ExecStart=/usr/bin/python3 /home/wouter/telegram_bot/raspberryonbalansprij>WorkingDirectory=/home/wouter/telegram_bot
+   ExecStart=/usr/bin/python3 /home/pi/Onbalansprijs_telegram/main.py
+   WorkingDirectory=/home/pi/Onbalansprijs_telegram
    Restart=always
    RestartSec=5
-   User=wouter
+   User=pi
    Environment=PYTHONUNBUFFERED=1
 
    [Install]
    WantedBy=multi-user.target
+   ´´´
 
 3. Activeer de service:
 
