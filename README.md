@@ -1,36 +1,56 @@
-# ⚡ Elia Onbalansprijs Telegram Bot
+# ⚡ Elia Imbalance Price Telegram Bot
 
-Een Python-script dat de **onbalansprijzen** van de Belgische netbeheerder **Elia** automatisch ophaalt en **meldingen stuurt via Telegram** bij extreme prijsveranderingen.  
-Het script is geoptimaliseerd om **continu te draaien op een Raspberry Pi**.
-
----
-
-## 🧠 Functionaliteit
-
-- 📡 Haalt onbalansprijzen op via de **Elia API**
-- 🤖 Stuurt Telegram-meldingen bij prijsdrempels:
-  - ⚠️ Onder 50 €/MWh  
-  - ✅ Onder 0 €/MWh  
-  - 🌟 Onder -50 €/MWh  
-  - ❄️ Zeer laag (< -150 €/MWh)  
-  - 🧊 Extreem laag (< -500 €/MWh)  
-  - 🚨 Zeer hoog (> 400 €/MWh)
-- 🔁 Meldt wanneer de server of Raspberry herstart
-- 💬 Reageert op het Telegram-commando `/price` met de huidige prijs
-- 🔒 Fouttolerant dankzij retries, logging en backoff-logica
+A Python script that automatically retrieves the **imbalance prices** from the Belgian grid operator **Elia** and sends **alerts via Telegram** when extreme price changes occur.  
+The script is optimized to run **continuously on a Raspberry Pi**.
 
 ---
 
-## 🧩 Installatie
+## 🧠 Features
 
-1. Clone deze repository:
+- 📡 Fetches imbalance prices via the **Elia API**
+- 🤖 Sends Telegram alerts when thresholds are crossed:
+  - ⚠️ Below 50 €/MWh  
+  - ✅ Below 0 €/MWh  
+  - 🌟 Below -50 €/MWh  
+  - ❄️ Very low (< -150 €/MWh)  
+  - 🧊 Extremely low (< -500 €/MWh)  
+  - 🚨 Very high (> 400 €/MWh)
+- 🔁 Reports when the server or Raspberry Pi restarts
+- 💬 Responds to the Telegram command `/price` with the current price
+- 🔒 Fault-tolerant thanks to retries, logging, and backoff logic
+- 🗂️ Modular design: separate files for API, Telegram, price logic, and monitoring
+
+---
+
+## 📂 Project Structure
+
+```
+Onbalansprijs_telegram/
+├── onbalansprijs/
+│   ├── __init__.py
+│   ├── elia_api.py          # API-calls naar Elia
+│   ├── telegram_bot.py      # Telegram berichten sturen/ontvangen
+│   ├── prijs_logica.py      # Logica rond prijsstatus en meldingen
+│   ├── prijs_monitor.py     # Loops en threads voor prijscontrole & monitoring
+│   └── logging_helpers.py   # Logging setup en gedeelde sessie
+├── configuratie.py          # Configuratie en environment variabelen
+├── hoofdprogramma.py        # Startpunt van de applicatie
+├── vereisten.txt            # Dependencies
+└── .env.example             # Voorbeeld van vereiste variabelen
+```
+
+---
+
+## 🧩 Installation
+
+1. Clone this repository:
 
    ```bash
-   git clone https://github.com/WonterRobter/Onbalansprijs_telegram.git
-   cd Onbalansprijs_telegram
+   git clone https://github.com/WonterRobter/ImbalancePrice_Telegram.git
+   cd ImbalancePrice_Telegram
    ```
 
-2. Installeer vereisten:
+2. Install requirements:
 
    ```bash
    sudo apt update
@@ -38,46 +58,46 @@ Het script is geoptimaliseerd om **continu te draaien op een Raspberry Pi**.
    pip install -r requirements.txt
    ```
 
-3. ⚙️ Configuratie  
-   Maak een `.env` bestand in de hoofdmap met de volgende inhoud:
+3. ⚙️ Configuration  
+   Create a `.env` file in the root directory with the following content:
 
    ```env
-   TELEGRAM_BOT_TOKEN=je_bot_token
+   TELEGRAM_BOT_TOKEN=your_bot_token
    TELEGRAM_CHAT_IDS=123456789,987654321
-   ELIA_API_URL=https://api.elia.be/...   # Het endpoint dat je gebruikt
+   ELIA_API_URL=https://api.elia.be/...   # The endpoint you use
+   LOG_LEVEL=INFO
    ```
 
-   **Uitleg:**
-   
-   - `TELEGRAM_BOT_TOKEN` → Verkregen via [@BotFather](https://t.me/BotFather)  
-   - `TELEGRAM_CHAT_IDS` → Komma-gescheiden lijst met Telegram-chat-ID’s die meldingen ontvangen  
-   - `ELIA_API_URL` → API-endpoint voor onbalansprijzen (Elia)
-   
-   ⚠️ Vergeet niet `.env` toe te voegen aan je `.gitignore`, zodat je gevoelige gegevens niet per ongeluk uploadt naar GitHub.
+   **Explanation:**
+   - `TELEGRAM_BOT_TOKEN` → Obtained via [@BotFather](https://t.me/BotFather)  
+   - `TELEGRAM_CHAT_IDS` → Comma-separated list of Telegram chat IDs to receive alerts  
+   - `ELIA_API_URL` → API endpoint for imbalance prices (Elia or your test API)  
+   - `LOG_LEVEL` → Optional, default `INFO`  
 
-4. 🚀 Gebruik / draaien  
-   Start de bot:
+   ⚠️ Don’t forget to add `.env` to your `.gitignore` so sensitive data isn’t uploaded to GitHub.
+
+4. 🚀 Run the bot:
 
    ```bash
    python3 main.py
    ```
 
-   De bot blijft lopen en controleert elke ~15 seconden de actuele prijs.  
-   Hij stuurt meldingen bij veranderingen volgens jouw ingestelde drempelwaarden.
+   The bot runs continuously, checking the current price every ~15 seconds.  
+   It sends alerts when thresholds are crossed.
 
 ---
 
-## 🔁 Automatisch starten via systemd (Raspberry Pi)
+## 🔁 Auto-start with systemd (Raspberry Pi)
 
-Je kunt de bot automatisch starten na elke reboot met een systemd-service:
+You can configure the bot to start automatically after each reboot using a systemd service:
 
-1. Maak een servicebestand:
+1. Create a service file:
 
    ```bash
    sudo nano /etc/systemd/system/elia-bot.service
    ```
 
-2. Voeg deze inhoud toe:
+2. Add the following content:
 
    ```ini
    [Unit]
@@ -86,8 +106,8 @@ Je kunt de bot automatisch starten na elke reboot met een systemd-service:
    Wants=network-online.target
 
    [Service]
-   ExecStart=/usr/bin/python3 /home/pi/Onbalansprijs_telegram/main.py
-   WorkingDirectory=/home/pi/Onbalansprijs_telegram
+   ExecStart=/usr/bin/python3 /home/pi/ImbalancePrice_Telegram/main.py
+   WorkingDirectory=/home/pi/ImbalancePrice_Telegram
    Restart=always
    RestartSec=5
    User=pi
@@ -95,9 +115,9 @@ Je kunt de bot automatisch starten na elke reboot met een systemd-service:
 
    [Install]
    WantedBy=multi-user.target
-   ´´´
+   ```
 
-3. Activeer de service:
+3. Enable the service:
 
    ```bash
    sudo systemctl daemon-reload
@@ -105,13 +125,13 @@ Je kunt de bot automatisch starten na elke reboot met een systemd-service:
    sudo systemctl start elia-bot
    ```
 
-4. Controleer de status:
+4. Check the status:
 
    ```bash
    sudo systemctl status elia-bot
    ```
 
-   **Of volg de logs live:**
+   **Or follow logs live:**
 
    ```bash
    journalctl -u elia-bot -f
@@ -121,7 +141,7 @@ Je kunt de bot automatisch starten na elke reboot met een systemd-service:
 
 ## 📦 Requirements
 
-Maak een bestand aan met de naam `requirements.txt` en voeg het volgende toe:
+Create a file named `requirements.txt` and add:
 
 ```
 requests
@@ -133,7 +153,7 @@ pytz
 
 ## 🚫 .gitignore
 
-Voeg dit bestand toe met de naam `.gitignore` om gevoelige of overbodige bestanden te negeren:
+Add a `.gitignore` file to exclude sensitive or unnecessary files:
 
 ```
 # Python
@@ -151,21 +171,59 @@ __pycache__/
 # Logs
 *.log
 
-# OS bestanden
+# OS files
 .DS_Store
 Thumbs.db
 ```
 
 ---
 
-## 📜 Licentie
+## 📊 Example Output in Telegram
 
-Dit project valt onder de [MIT License](./LICENSE).  
-Vrij te gebruiken en aan te passen — geef graag een vermelding naar de originele auteur.
+When price drops below 0 €/MWh:
+```
+✅ Imbalance price below 0 : -12 €/MWh
+🕒 Time: 14:30
+```
+
+When price rises above 400 €/MWh:
+```
+🚨 VERY HIGH imbalance price: 425 €/MWh
+🕒 Time: 18:45
+```
+
+When the server reboots:
+```
+🔄 Server restarted!: 35 €/MWh
+🕒 Time: 09:15
+```
+
+---
+
+## ❓ FAQ
+
+**What if the API is unreachable?**  
+The bot retries with backoff logic. Errors are logged.
+
+**Can I use multiple chat IDs?**  
+Yes, provide them comma-separated in `TELEGRAM_CHAT_IDS`.
+
+**Can I test without the real Elia API?**  
+Yes, use the included fake API (`fake_api_dynamic.py`) and set `ELIA_API_URL=http://localhost:5000/testdata`.
+
+**How often is the price checked?**  
+Every 15 seconds (configurable in the code).
+
+---
+
+## 📜 License
+
+This project is licensed under the [MIT License](./LICENSE).  
+Free to use and adapt — please credit the original author.
 
 ---
 
 ## 💡 Credits
 
-Ontwikkeld door **Wouter**  
-🧠 Gebouwd voor **energie-enthousiastelingen** die realtime inzicht willen in de Belgische onbalansprijzen.
+Developed by **Wouter**  
+🧠 Built for **energy enthusiasts** who want real-time insight into Belgian imbalance prices.
