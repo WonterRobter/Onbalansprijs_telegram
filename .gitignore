@@ -16,3 +16,7 @@ __pycache__/
 # OS bestanden
 .DS_Store
 Thumbs.db
+
+# txt bestanden
+projectstructuur.txt
+raspberryonbalansprijs.py.txt
