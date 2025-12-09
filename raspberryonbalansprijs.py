@@ -117,21 +117,26 @@ def haal_onbalansprijs_op():
 def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
     """
     Vergelijkt de nieuwe prijs met de grenswaardes en bepaalt of er een melding moet komen.
+    Opmaak: Titel VET, Prijs NORMAAL, Tijd SCHUIN.
     """
     prijs = round(prijs) # Rond af op hele euro's
     tijd_str = f"{timestamp_obj.hour}:{timestamp_obj.minute:02}" # Tijd zonder tekst voor in bericht
 
     # Alleen loggen in de console als de prijs daadwerkelijk verandert
     if prijs != laatste_prijs:
-        logging.info(f"📊 Nieuwe prijs ontvangen: {prijs} €\MWh ({tijd_str})")
+        logging.info(f"📊 Nieuwe prijs ontvangen: {prijs} €\\MWh ({tijd_str})")
+
+        # Hulpfunctie voor de opmaak
+        def maak_bericht(titel, icoon):
+            # \n betekent: ga naar de volgende regel
+            return f"{icoon} <b>{titel}</b>\n💶 <b>{prijs}</b>  €\\MWh\n <i>{tijd_str}</i>"
 
         # --- CONTROLE: EXTREME PRIJZEN ---
 
         # 1. Extreem laag (< -500)
         if prijs < -500 and not status.get('extreem_laag'):
             for chat_id in TELEGRAM_CHAT_IDS:
-                stuur_telegram_bericht(f'🧊 <b>EXTREEM LAGE PRIJS:</b> <code>{prijs}</code> €\MWh\n<i>{tijd_str}</i>', chat_id)
-            # Zet alle lagere vlaggen ook op True
+                stuur_telegram_bericht(maak_bericht("EXTREEM LAGE PRIJS", "🧊"), chat_id)
             status.update({
                 'extreem_laag': True, 
                 'zeer_laag': True, 
@@ -144,7 +149,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         # 2. Zeer laag (< -150)
         if prijs < -150 and not status.get('zeer_laag'):
             for chat_id in TELEGRAM_CHAT_IDS:
-                stuur_telegram_bericht(f'❄️ <b>ZÉÉR LAGE PRIJS:</b> <code>{prijs}</code> €\MWh\n<i>{tijd_str}</i>', chat_id)
+                stuur_telegram_bericht(maak_bericht("ZÉÉR LAGE PRIJS", "❄️"), chat_id)
             status.update({
                 'zeer_laag': True, 
                 'onder_min_50': True, 
@@ -156,8 +161,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         # 3. Zeer hoog (> 400)
         if prijs > 400 and not status.get('zeer_hoog'):
             for chat_id in TELEGRAM_CHAT_IDS:
-                stuur_telegram_bericht(f'🚨 <b>ZÉÉR HOGE PRIJS:</b> <code>{prijs}</code> €\MWh\n<i>{tijd_str}</i>', chat_id)
-            # Reset alle 'lage' status vlaggen
+                stuur_telegram_bericht(maak_bericht("ZÉÉR HOGE PRIJS", "🚨"), chat_id)
             status.update({
                 'zeer_hoog': True, 
                 'extreem_laag': False, 
@@ -170,7 +174,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         # 4. Onder -50
         if prijs < -50 and not status.get('onder_min_50'):
             for chat_id in TELEGRAM_CHAT_IDS:
-                stuur_telegram_bericht(f'🌟 <b>Prijs onder -50:</b> <code>{prijs}</code> €\MWh\n<i>{tijd_str}</i>', chat_id)
+                stuur_telegram_bericht(maak_bericht("Prijs onder -50", "🌟"), chat_id)
             status.update({
                 'onder_min_50': True, 
                 'onder_0': True, 
@@ -181,7 +185,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         # 5. Onder 0 (Negatief)
         if prijs < 0 and not status.get('onder_0'):
             for chat_id in TELEGRAM_CHAT_IDS:
-                stuur_telegram_bericht(f'✅ <b>Prijs onder 0:</b> <code>{prijs}</code> €\MWh\n<i>{tijd_str}</i>', chat_id)
+                stuur_telegram_bericht(maak_bericht("Prijs onder 0", "✅"), chat_id)
             status.update({
                 'onder_0': True, 
                 'onder_50': True, 
@@ -191,16 +195,18 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         # 6. Onder 50 (Goedkoop)
         if 0 < prijs < 50 and not status.get('onder_50'):
             for chat_id in TELEGRAM_CHAT_IDS:
-                stuur_telegram_bericht(f'⚠️ <b>Prijs onder 50:</b> <code>{prijs}</code> €\MWh\n<i>{tijd_str}</i>', chat_id)
-            status.update({'onder_50': True, 'zeer_hoog': False})
+                stuur_telegram_bericht(maak_bericht("Prijs onder 50", "⚠️"), chat_id)
+            status.update({
+                'onder_50': True, 
+                'zeer_hoog': False })
             return prijs, status
 
-        # --- CONTROLE: HERSTELMELDINGEN (PRIJS STIJGT WEER) ---
+        # --- CONTROLE: HERSTELMELDINGEN (Met Hysterese) ---
 
-        # Herstel: Boven 50
-        if prijs >= 50 and status.get('onder_50'):
+        # Herstel: Boven 50 (Trigger pas bij 60)
+        if prijs >= 60 and status.get('onder_50'):
             for chat_id in TELEGRAM_CHAT_IDS:
-                stuur_telegram_bericht(f'🚨 <b>Prijs weer boven 50:</b> <code>{prijs}</code> €\MWh\n<i>{tijd_str}</i>', chat_id)
+                stuur_telegram_bericht(maak_bericht("Prijs weer normaal (>50)", "📈"), chat_id)
             status.update({
                 'onder_50': False, 
                 'onder_0': False, 
@@ -209,7 +215,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         # Herstel: Boven 0
         elif prijs >= 0 and status.get('onder_0'):
             for chat_id in TELEGRAM_CHAT_IDS:
-                stuur_telegram_bericht(f'⚠️ <b>Prijs weer positief:</b> <code>{prijs}</code> €\MWh\n<i>{tijd_str}</i>', chat_id)
+                stuur_telegram_bericht(maak_bericht("Prijs weer positief", "⚠️"), chat_id)
             status.update({
                 'onder_0': False, 
                 'onder_min_50': False })
@@ -217,7 +223,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         # Herstel: Boven -50
         elif prijs >= -50 and status.get('onder_min_50'):
             for chat_id in TELEGRAM_CHAT_IDS:
-                stuur_telegram_bericht(f'☑️ <b>Prijs weer boven -50:</b> <code>{prijs}</code> €\MWh\n<i>{tijd_str}</i>', chat_id)
+                stuur_telegram_bericht(maak_bericht("Prijs weer boven -50", "☑️"), chat_id)
             status.update({'onder_min_50': False})
 
     return prijs, status
@@ -253,7 +259,7 @@ def monitor_telegram():
                     prijs, timestamp_obj = haal_onbalansprijs_op()
                     if prijs is not None:
                         tijd_str = f"{timestamp_obj.hour}:{timestamp_obj.minute:02}"
-                        stuur_telegram_bericht(f"ℹ️ <b>Huidige prijs:</b> <code>{round(prijs)}</code> €\MWh\n🕒 <i>{tijd_str}</i>", chat_id)
+                        stuur_telegram_bericht(f"ℹ️ <b>Huidige prijs:</b> \n💶 <b>{round(prijs)}</b>  €\\MWh\n <i>{tijd_str}</i>", chat_id)
                     else:
                         stuur_telegram_bericht("⚠️ <b>Fout:</b> Kon prijs niet ophalen.", chat_id)
             
@@ -280,7 +286,7 @@ def prijscontrole_loop():
     prijs, timestamp_obj = haal_onbalansprijs_op()
     if prijs is not None:
         tijd_str = f"{timestamp_obj.hour}:{timestamp_obj.minute:02}"
-        bericht = f'🔄 <b>Server herstart!</b>\nPrijs: <code>{round(prijs)}</code> €\MWh\n<i>{tijd_str}</i>'
+        bericht = f'🔄 <b>Server herstart!</b>\n💶 <b>{round(prijs)}</b>  €\\MWh\n<i>{tijd_str}</i>'
         for chat_id in TELEGRAM_CHAT_IDS:
             stuur_telegram_bericht(bericht, chat_id)
 
