@@ -9,10 +9,13 @@ Het script bestaat uit **één overzichtelijk bestand**, geoptimaliseerd om 24/7
 ## 🧠 Wat doet dit script?
 
 * 📡 **Real-time Monitoring:** Checkt elke 15 seconden de actuele onbalansprijs via de Elia API.
+* 📈 **Dagstatistieken:** Houdt continu bij wat de hoogste, laagste en gemiddelde prijs van de dag is (tijdgewogen).
 * 🎨 **Duidelijke Meldingen:** Stuurt berichten met **dikgedrukte** prijzen en tijdstippen voor snelle leesbaarheid.
 * 🛡️ **Anti-Spam:** Slimme logica voorkomt dat je elke minuut een bericht krijgt als de prijs rond een grens schommelt ("klapperen").
 * 🔁 **Status Updates:** Meldt automatisch wanneer de server (of het script) opnieuw is opgestart.
-* 💬 **Direct Opvragen:** Stuur het commando `/price` in Telegram om direct de huidige prijs te weten.
+* 💬 **Commando's:**
+    * `/price` - Ontvang direct de huidige prijs.
+    * `/vandaag` - Bekijk het overzicht (Min / Max / Gemiddelde) van vandaag.
 * 🔒 **Robuust:** Blijft draaien bij internetstoringen of API-fouten (auto-retry).
 
 ### 📊 Meldingen bij deze grenzen:

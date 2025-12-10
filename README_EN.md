@@ -9,10 +9,13 @@ The script consists of **one clear file**, optimized to run 24/7 on a Raspberry 
 ## 🧠 What does this script do?
 
   * 📡 **Real-time Monitoring:** Checks the current imbalance price via the Elia API every 15 seconds.
+  * 📈 **Daily Statistics:** Continuously tracks the highest, lowest, and average price of the day (time-weighted).
   * 🎨 **Clear Notifications:** Sends messages with **bold** prices and timestamps for quick readability.
   * 🛡️ **Anti-Spam:** Smart logic prevents you from receiving a message every minute if the price fluctuates around a threshold ("flapping").
   * 🔁 **Status Updates:** Automatically reports when the server (or the script) has restarted.
-  * 💬 **Direct Query:** Send the command `/price` in Telegram to instantly get the current price.
+  * 💬 **Commando's:**
+    * `/price` - Instantly receive the current price.
+    * `/vandaag` - View today's overview (Min / Max / Average).
   * 🔒 **Robust:** Keeps running during internet outages or API errors (auto-retry).
 
 ### 📊 Notifications at these thresholds:
