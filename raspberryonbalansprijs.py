@@ -1,5 +1,6 @@
 import requests
 import time
+from datetime import date
 import logging
 import threading
 import os
@@ -36,6 +37,10 @@ BELGIUM_TZ = pytz.timezone('Europe/Brussels')
 
 # Maak een gedeelde sessie aan voor efficiënter internetverkeer
 session = requests.Session()
+
+# NIEUW: Lijst om prijzen van vandaag te onthouden
+prijzen_vandaag = []
+laatste_datum = datetime.now().date()
 
 
 # =============================================================================
@@ -234,7 +239,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
 
 def monitor_telegram():
     """
-    Blijft luisteren naar nieuwe berichten van gebruikers (bijv. /price).
+    Blijft luisteren naar nieuwe berichten van gebruikers (bijv. /price en /vandaag).
     """
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
     last_update_id = None
@@ -254,14 +259,33 @@ def monitor_telegram():
                 tekst = message.get('text', '').strip()
                 chat_id = message.get('chat', {}).get('id')
                 
-                if chat_id and tekst == "/price":
-                    # Gebruiker vraagt handmatig om de prijs
-                    prijs, timestamp_obj = haal_onbalansprijs_op()
-                    if prijs is not None:
-                        tijd_str = f"{timestamp_obj.hour}:{timestamp_obj.minute:02}"
-                        stuur_telegram_bericht(f"ℹ️ <b>Huidige prijs:</b> {round(prijs)} €\\MWh\n <i>{tijd_str}</i>", chat_id)
-                    else:
-                        stuur_telegram_bericht("⚠️ <b>Fout:</b> Kon prijs niet ophalen.", chat_id)
+                if chat_id:
+                    # 1. Commando /price
+                    if tekst == "/price":
+                        prijs, timestamp_obj = haal_onbalansprijs_op()
+                        if prijs is not None:
+                            tijd_str = f"{timestamp_obj.hour}:{timestamp_obj.minute:02}"
+                            stuur_telegram_bericht(f"ℹ️ <b>Huidige prijs:</b> {round(prijs)} €\\MWh\n <i>{tijd_str}</i>", chat_id)
+                        else:
+                            stuur_telegram_bericht("⚠️ <b>Fout:</b> Kon prijs niet ophalen.", chat_id)
+
+                    # 2. NIEUW: Commando /vandaag
+                    elif tekst == "/vandaag":
+                        if not prijzen_vandaag:
+                            stuur_telegram_bericht("📉 Nog geen metingen verzameld vandaag.", chat_id)
+                        else:
+                            laagste = round(min(prijzen_vandaag))
+                            hoogste = round(max(prijzen_vandaag))
+                            gemiddelde = round(sum(prijzen_vandaag) / len(prijzen_vandaag))
+                            
+                            bericht = (
+                                f"📊 <b>Overzicht Vandaag</b>\n\n"
+                                f"📉 Laagste: <b>{laagste} €\\MWh</b>\n"
+                                f"📈 Hoogste: <b>{hoogste} €\\MWh</b>\n"
+                                f"⚖️ Gemiddeld: <b>{gemiddelde} €\\MWh</b>\n"
+                                f"⏱️ Aantal metingen: {len(prijzen_vandaag)}"
+                            )
+                            stuur_telegram_bericht(bericht, chat_id)
             
             time.sleep(1)
             
@@ -272,7 +296,11 @@ def monitor_telegram():
 def prijscontrole_loop():
     """
     Checkt elke 15 seconden de prijs en werkt de status bij.
+    Slaat ook de prijzen op voor de statistieken.
     """
+    # We moeten aangeven dat we de globale variabelen willen gebruiken
+    global prijzen_vandaag, laatste_datum 
+
     laatste_prijs = None
     # Houdt bij welke meldingen we al gestuurd hebben
     status = {
@@ -295,8 +323,21 @@ def prijscontrole_loop():
         try:
             prijs, timestamp_obj = haal_onbalansprijs_op()
             
-            if prijs is not None and timestamp_obj is not None:
-                laatste_prijs, status = beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj)
+            if prijs is not None:
+                # --- NIEUW: DATA OPSLAAN ---
+                # Check of het middernacht is geweest (resetten)
+                vandaag = datetime.now().date()
+                if vandaag != laatste_datum:
+                    prijzen_vandaag = []
+                    laatste_datum = vandaag
+                    logging.info("📅 Nieuwe dag: statistieken gereset.")
+
+                # Voeg prijs toe aan de lijst
+                prijzen_vandaag.append(prijs)
+                # ---------------------------
+
+                if timestamp_obj is not None:
+                    laatste_prijs, status = beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj)
             
             time.sleep(15) # Wacht 15 seconden voor volgende check
             
