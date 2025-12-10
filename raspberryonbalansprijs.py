@@ -129,7 +129,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         # Hulpfunctie voor de opmaak
         def maak_bericht(titel, icoon):
             # \n betekent: ga naar de volgende regel
-            return f"{icoon} <b>{titel}</b>\n💶 <b>{prijs}</b>  €\\MWh\n <i>{tijd_str}</i>"
+            return f"{icoon} <b>{titel}:</b> {prijs} €\\MWh\n <i>{tijd_str}</i>"
 
         # --- CONTROLE: EXTREME PRIJZEN ---
 
@@ -206,7 +206,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         # Herstel: Boven 50 (Trigger pas bij 60)
         if prijs >= 60 and status.get('onder_50'):
             for chat_id in TELEGRAM_CHAT_IDS:
-                stuur_telegram_bericht(maak_bericht("Prijs weer normaal (>50)", "📈"), chat_id)
+                stuur_telegram_bericht(maak_bericht("Prijs weer boven 50", "📈"), chat_id)
             status.update({
                 'onder_50': False, 
                 'onder_0': False, 
@@ -259,7 +259,7 @@ def monitor_telegram():
                     prijs, timestamp_obj = haal_onbalansprijs_op()
                     if prijs is not None:
                         tijd_str = f"{timestamp_obj.hour}:{timestamp_obj.minute:02}"
-                        stuur_telegram_bericht(f"ℹ️ <b>Huidige prijs:</b> \n💶 <b>{round(prijs)}</b>  €\\MWh\n <i>{tijd_str}</i>", chat_id)
+                        stuur_telegram_bericht(f"ℹ️ <b>Huidige prijs:</b> {round(prijs)} €\\MWh\n <i>{tijd_str}</i>", chat_id)
                     else:
                         stuur_telegram_bericht("⚠️ <b>Fout:</b> Kon prijs niet ophalen.", chat_id)
             
@@ -286,7 +286,7 @@ def prijscontrole_loop():
     prijs, timestamp_obj = haal_onbalansprijs_op()
     if prijs is not None:
         tijd_str = f"{timestamp_obj.hour}:{timestamp_obj.minute:02}"
-        bericht = f'🔄 <b>Server herstart!</b>\n💶 <b>{round(prijs)}</b>  €\\MWh\n<i>{tijd_str}</i>'
+        bericht = f'🔄 <b>Server herstart!</b>  {round(prijs)}  €\\MWh\n<i>{tijd_str}</i>'
         for chat_id in TELEGRAM_CHAT_IDS:
             stuur_telegram_bericht(bericht, chat_id)
 
