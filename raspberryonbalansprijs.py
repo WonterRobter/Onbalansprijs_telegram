@@ -8,6 +8,12 @@ import pytz
 from datetime import datetime
 from dotenv import load_dotenv
 
+import matplotlib
+matplotlib.use('Agg') # Zorgt dat hij kan tekenen zonder beeldscherm
+import matplotlib.pyplot as plt
+import io # Nodig om plaatjes in het geheugen op te slaan
+import matplotlib.dates as mdates # Voor mooie tijd-as
+
 # =============================================================================
 # 1. CONFIGURATIE & INSTELLINGEN
 # =============================================================================
@@ -39,7 +45,8 @@ BELGIUM_TZ = pytz.timezone('Europe/Brussels')
 session = requests.Session()
 
 # NIEUW: Lijst om prijzen van vandaag te onthouden
-prijzen_vandaag = []
+history_prices = [] # De Y-as (Prijs)
+history_times = []  # De X-as (Tijd)
 laatste_datum = datetime.now().date()
 
 
@@ -74,6 +81,23 @@ def stuur_telegram_bericht(bericht, chat_id, retries=3):
             if attempt < retries - 1:
                 time.sleep(backoff)
                 backoff *= 2 # Wacht steeds iets langer (2s, 4s, 8s...)
+
+def stuur_telegram_foto(photo_buffer, chat_id):
+    """
+    Stuurt een afbeelding (vanuit geheugen) naar Telegram.
+    """
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+    
+    # We sturen de buffer als een bestand
+    files = {'photo': ('grafiek.png', photo_buffer, 'image/png')}
+    data = {'chat_id': chat_id}
+    
+    try:
+        response = session.post(url, data=data, files=files, timeout=20)
+        response.raise_for_status()
+        logging.info(f"📸 Grafiek verzonden naar {chat_id}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"❌ Fout bij sturen foto: {e}")
 
 def doe_http_aanroep(url, retries=3, timeout=10):
     """
@@ -269,23 +293,61 @@ def monitor_telegram():
                         else:
                             stuur_telegram_bericht("⚠️ <b>Fout:</b> Kon prijs niet ophalen.", chat_id)
 
-                    # 2. NIEUW: Commando /vandaag
+                    # 2. Commando /vandaag
                     elif tekst == "/vandaag":
-                        if not prijzen_vandaag:
+                        if not history_prices:
                             stuur_telegram_bericht("📉 Nog geen metingen verzameld vandaag.", chat_id)
                         else:
-                            laagste = round(min(prijzen_vandaag))
-                            hoogste = round(max(prijzen_vandaag))
-                            gemiddelde = round(sum(prijzen_vandaag) / len(prijzen_vandaag))
+                            laagste = round(min(history_prices))
+                            hoogste = round(max(history_prices))
+                            gemiddelde = round(sum(history_prices) / len(history_prices))
                             
                             bericht = (
                                 f"📊 <b>Overzicht Vandaag</b>\n\n"
                                 f"📉 Laagste: <b>{laagste} €\\MWh</b>\n"
                                 f"📈 Hoogste: <b>{hoogste} €\\MWh</b>\n"
                                 f"⚖️ Gemiddeld: <b>{gemiddelde} €\\MWh</b>\n"
-                                f"⏱️ Aantal metingen: {len(prijzen_vandaag)}"
+                                f"⏱️ Aantal metingen: {len(history_prices)}"
                             )
                             stuur_telegram_bericht(bericht, chat_id)
+                    
+                    # 3. Commando /grafiek
+                    elif tekst == "/grafiek":
+                        if len(history_prices) < 2:
+                            stuur_telegram_bericht("📉 Nog niet genoeg data voor een grafiek.", chat_id)
+                        else:
+                            stuur_telegram_bericht("🎨 Grafiek wordt gemaakt, ogenblik...", chat_id)
+                            
+                            try:
+                                # --- STAP A: Grafiek tekenen ---
+                                plt.figure(figsize=(10, 5)) # Breedte x Hoogte
+                                plt.plot(history_times, history_prices, color='blue', linewidth=2)
+                                
+                                # Opmaak
+                                plt.title(f"Onbalansprijzen ({datetime.now().strftime('%d-%m-%Y')})")
+                                plt.ylabel("Prijs (€\\MWh)")
+                                plt.grid(True, linestyle='--', alpha=0.7)
+                                
+                                # Tijd as mooi maken (uur:minuut)
+                                plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+                                plt.gcf().autofmt_xdate() # Draai de labels schuin als het druk is
+
+                                # Rode lijn bij 0 euro
+                                plt.axhline(0, color='red', linewidth=1, linestyle='-')
+
+                                # --- STAP B: Opslaan in geheugen (niet op schijf) ---
+                                buf = io.BytesIO()
+                                plt.savefig(buf, format='png')
+                                buf.seek(0) # Terugspoelen naar begin van bestand
+                                plt.close() # Belangrijk: Geheugen vrijgeven!
+
+                                # --- STAP C: Versturen ---
+                                stuur_telegram_foto(buf, chat_id)
+                                buf.close()
+                                
+                            except Exception as e:
+                                logging.error(f"Fout bij maken grafiek: {e}")
+                                stuur_telegram_bericht("❌ Kon grafiek niet genereren.", chat_id)
             
             time.sleep(1)
             
@@ -299,7 +361,7 @@ def prijscontrole_loop():
     Slaat ook de prijzen op voor de statistieken.
     """
     # We moeten aangeven dat we de globale variabelen willen gebruiken
-    global prijzen_vandaag, laatste_datum 
+    global history_prices, history_times, laatste_datum
 
     laatste_prijs = None
     # Houdt bij welke meldingen we al gestuurd hebben
@@ -324,16 +386,20 @@ def prijscontrole_loop():
             prijs, timestamp_obj = haal_onbalansprijs_op()
             
             if prijs is not None:
-                # --- NIEUW: DATA OPSLAAN ---
-                # Check of het middernacht is geweest (resetten)
+                # --- NIEUW: DATA OPSLAAN VOOR GRAFIEK ---
                 vandaag = datetime.now().date()
+                
+                # Als de datum verandert, lijsten leegmaken
                 if vandaag != laatste_datum:
-                    prijzen_vandaag = []
+                    history_prices = []
+                    history_times = []
                     laatste_datum = vandaag
-                    logging.info("📅 Nieuwe dag: statistieken gereset.")
+                    logging.info("📅 Nieuwe dag: grafiek data gereset.")
 
-                # Voeg prijs toe aan de lijst
-                prijzen_vandaag.append(prijs)
+                # Voeg prijs EN tijd toe
+                history_prices.append(prijs)
+                # We gebruiken datetime.now() voor de X-as zodat het mooi aansluit
+                history_times.append(datetime.now())
                 # ---------------------------
 
                 if timestamp_obj is not None:

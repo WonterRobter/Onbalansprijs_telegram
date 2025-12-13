@@ -1,0 +1,36 @@
+=== Bronnenlijst ===
+
+Elia Data & API:
+- Elia Open Data Portal: https://opendata.elia.be/ (13/12/2025)
+- Dataset Imbalance Prices: https://opendata.elia.be/explore/dataset/ods161/information/ (13/12/2025)
+- API CONFIGURATIE: https://opendata.elia.be/explore/dataset/ods161/api/ (13/12/2025)
+- API Documentatie: https://opendata.elia.be/api/v1/console/datasets/1.0/search/ (13/12/2025)
+
+Telegram API:
+- Officiële Bot API Documentatie: https://core.telegram.org/bots/api (13/12/2025)
+- BotFather (Bot aanmaken): https://t.me/BotFather (13/12/2025)
+- SendPhoto methode (Grafieken): https://core.telegram.org/bots/api#sendphoto (13/12/2025)
+- HTML style formatting: https://core.telegram.org/bots/api#html-style (13/12/2025)
+
+Python Libraries (Productie):
+- Requests (HTTP aanroepen): https://pypi.org/project/requests/ (13/12/2025)
+- Matplotlib (Grafieken genereren): https://matplotlib.org/ (13/12/2025)
+- Python Dotenv (.env inlezen): https://pypi.org/project/python-dotenv/ (13/12/2025)
+- Pytz (Tijdzones): https://pypi.org/project/pytz/ (13/12/2025)
+
+Python Libraries (Testen):
+- Flask (Fake API server): https://flask.palletsprojects.com/ (13/12/2025)
+- Random module (Testdata genereren): https://docs.python.org/3/library/random.html (13/12/2025)
+
+Specifieke Code Technieken:
+- Matplotlib Agg backend (Headless server): https://matplotlib.org/stable/users/explain/figure/backends.html (13/12/2025)
+- Python io.BytesIO (Buffer in geheugen): https://docs.python.org/3/library/io.html#io.BytesIO (13/12/2025)
+- Time Weighted Average (Gewogen gemiddelde): https://en.wikipedia.org/wiki/Time-weighted_average_price (13/12/2025)
+- Threading in Python: https://docs.python.org/3/library/threading.html (13/12/2025)
+
+Server & Raspberry Pi:
+- Systemd Service Units (Auto-start): https://www.raspberrypi.com/documentation/computers/linux_kernel.html#systemd (13/12/2025)
+- Crontab vs Systemd: https://wiki.debian.org/systemd (13/12/2025)
+
+AI Ondersteuning:
+- Google Gemini: https://gemini.google.com/
