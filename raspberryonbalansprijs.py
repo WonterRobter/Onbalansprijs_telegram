@@ -5,7 +5,7 @@ import logging
 import threading
 import os
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 import matplotlib
@@ -21,7 +21,7 @@ import matplotlib.dates as mdates # Voor mooie tijd-as
 # Laad variabelen uit het .env bestand
 load_dotenv()
 
-# Logging instellen (zodat je ziet wat het script doet in de console)
+# Logging instellen
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -38,20 +38,22 @@ TELEGRAM_CHAT_IDS = [id.strip() for id in TELEGRAM_CHAT_IDS_RAW.split(",") if id
 # Elia API instellingen
 ELIA_API_URL = os.getenv('ELIA_API_URL')
 
-# Tijdzone instellen (belangrijk voor correcte tijd in berichten)
+# Tijdzone instellingen
 BELGIUM_TZ = pytz.timezone('Europe/Brussels')
 
-# Maak een gedeelde sessie aan voor efficiënter internetverkeer
+# Sessie instellingen
 session = requests.Session()
 
-# NIEUW: Lijst om prijzen van vandaag te onthouden
+# DATA OPSLAG
 history_prices = [] # De Y-as (Prijs)
 history_times = []  # De X-as (Tijd)
-laatste_datum = datetime.now().date()
+laatste_datum = datetime.now(BELGIUM_TZ).date()
 
+# Variabele om te voorkomen dat we om 23:59 elke seconde een rapport sturen
+dagrapport_verstuurd = False 
 
 # =============================================================================
-# 2. HULPFUNCTIES (TELEGRAM & API)
+# 2. HULPFUNCTIES (TELEGRAM, API & GENERATIE)
 # =============================================================================
 
 def stuur_telegram_bericht(bericht, chat_id, retries=3):
@@ -63,29 +65,25 @@ def stuur_telegram_bericht(bericht, chat_id, retries=3):
     
     # We voegen 'parse_mode': 'HTML' toe zodat Telegram de opmaak begrijpt
     payload = {"text": bericht, "chat_id": chat_id, "parse_mode": "HTML"}
-    
-    backoff = 2 # Wachttijd begint bij 2 seconden
+    backoff = 2
     
     for attempt in range(retries):
         try:
             # Debug log (zonder HTML tags voor leesbaarheid in console)
             logging.debug(f"Poging {attempt+1}: Verstuur bericht naar {chat_id}")
-            
             response = session.post(url, json=payload, timeout=10)
             response.raise_for_status() # Geeft een fout als de statuscode niet 200 is
             
             logging.info(f"✅ Bericht verzonden naar {chat_id}")
-            break # Het is gelukt, stop de loop
+            break
         except requests.exceptions.RequestException as e:
-            logging.error(f"❌ Fout bij verzenden (poging {attempt+1}): {e}")
+            logging.error(f"❌ Fout bij verzenden bericht (poging {attempt+1}): {e}")
             if attempt < retries - 1:
                 time.sleep(backoff)
                 backoff *= 2 # Wacht steeds iets langer (2s, 4s, 8s...)
 
 def stuur_telegram_foto(photo_buffer, chat_id):
-    """
-    Stuurt een afbeelding (vanuit geheugen) naar Telegram.
-    """
+    """ Stuurt een afbeelding naar Telegram """
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
     
     # We sturen de buffer als een bestand
@@ -115,31 +113,71 @@ def doe_http_aanroep(url, retries=3, timeout=10):
                 time.sleep(5)
     return None
 
+def genereer_grafiek_afbeelding():
+    """
+    Maakt de grafiek en geeft de buffer terug.
+    Geeft None terug als er te weinig data is.
+    """
+    if len(history_prices) < 2:
+        return None
+
+    try:
+        plt.figure(figsize=(10, 5))
+        plt.plot(history_times, history_prices, color='blue', linewidth=2)
+        
+        plt.title(f"Onbalansprijzen ({datetime.now(BELGIUM_TZ).strftime('%d-%m-%Y')})")
+        plt.ylabel("Prijs (€\MWh)")
+        plt.grid(True, linestyle='--', alpha=0.7)
+        
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M', tz=BELGIUM_TZ))
+        plt.gcf().autofmt_xdate()
+        plt.axhline(0, color='red', linewidth=1, linestyle='-')
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight')
+        plt.close()
+        buf.seek(0)
+        return buf
+    except Exception as e:
+        logging.error(f"Fout in grafiek generatie: {e}")
+        return None
+
+def genereer_dag_samenvatting():
+    """
+    Maakt de tekst voor het dagoverzicht.
+    """
+    if not history_prices:
+        return "📉 Nog geen metingen verzameld vandaag."
+    
+    laagste = round(min(history_prices))
+    hoogste = round(max(history_prices))
+    gemiddelde = round(sum(history_prices) / len(history_prices))
+    
+    return (
+        f"🏁 <b>Dagafsluiting</b>\n\n"
+        f"📉 Laagste: <b>{laagste} €\MWh</b>\n"
+        f"📈 Hoogste: <b>{hoogste} €\MWh</b>\n"
+        f"⚖️ Gemiddeld: <b>{gemiddelde} €\MWh</b>\n"
+        f"⏱️ Aantal metingen: {len(history_prices)}"
+    )
+
 # =============================================================================
-# 3. KERNLOGICA (PRIJZEN OPHALEN & VERWERKEN)
+# 3. KERNLOGICA
 # =============================================================================
 
 def haal_onbalansprijs_op():
-    """
-    Vraagt de laatste prijs op bij Elia en converteert de tijd naar Belgische tijd.
-    Geeft terug: (prijs, tijdstip) of (None, None) bij fouten.
-    """
     data = doe_http_aanroep(ELIA_API_URL)
-    
-    # Controleer of de data geldig is
     if not data or 'results' not in data or not data['results']:
         logging.warning("⚠️ Geen geldige data ontvangen van Elia.")
         return None, None
     
-    # Pak het meest recente resultaat
     laatste_data = data['results'][0]
     prijs = laatste_data.get('imbalanceprice')
     timestamp = laatste_data.get('datetime')
     
-    if prijs is None:
+    if prijs is None: 
         return None, None
     
-    # Zet de tijd om naar leesbare Belgische tijd
     timestamp_obj = datetime.fromisoformat(timestamp).astimezone(BELGIUM_TZ)
     return prijs, timestamp_obj
 
@@ -230,9 +268,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
                 'zeer_hoog': False })
             return prijs, status
 
-        # --- CONTROLE: HERSTELMELDINGEN (Met Hysterese) ---
-
-        # Herstel: Boven 50 (Trigger pas bij 60)
+        # --- HERSTEL ---
         if prijs >= 60 and status.get('onder_50'):
             for chat_id in TELEGRAM_CHAT_IDS:
                 stuur_telegram_bericht(maak_bericht("Prijs weer boven 50", "📈"), chat_id)
@@ -258,16 +294,12 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
     return prijs, status
 
 # =============================================================================
-# 4. HOOFDPROCESSEN (LOOP & MONITORING)
+# 4. HOOFDPROCESSEN
 # =============================================================================
 
 def monitor_telegram():
-    """
-    Blijft luisteren naar nieuwe berichten van gebruikers (bijv. /price en /vandaag).
-    """
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
     last_update_id = None
-    
     logging.info("🤖 Telegram monitor gestart...")
     
     while True:
@@ -286,73 +318,33 @@ def monitor_telegram():
                 if chat_id:
                     # 1. Commando /price
                     if tekst == "/price":
+                        logging.info(f"📩 Commando /price ontvangen van {chat_id}")
                         prijs, timestamp_obj = haal_onbalansprijs_op()
                         if prijs is not None:
                             tijd_str = f"{timestamp_obj.hour}:{timestamp_obj.minute:02}"
                             stuur_telegram_bericht(f"ℹ️ <b>Huidige prijs:</b> {round(prijs)} €\\MWh\n <i>{tijd_str}</i>", chat_id)
                         else:
-                            stuur_telegram_bericht("⚠️ <b>Fout:</b> Kon prijs niet ophalen.", chat_id)
+                            stuur_telegram_bericht("⚠️ Kon prijs niet ophalen.", chat_id)
 
                     # 2. Commando /vandaag
                     elif tekst == "/vandaag":
-                        if not history_prices:
-                            stuur_telegram_bericht("📉 Nog geen metingen verzameld vandaag.", chat_id)
-                        else:
-                            laagste = round(min(history_prices))
-                            hoogste = round(max(history_prices))
-                            gemiddelde = round(sum(history_prices) / len(history_prices))
-                            
-                            bericht = (
-                                f"📊 <b>Overzicht Vandaag</b>\n\n"
-                                f"📉 Laagste: <b>{laagste} €\\MWh</b>\n"
-                                f"📈 Hoogste: <b>{hoogste} €\\MWh</b>\n"
-                                f"⚖️ Gemiddeld: <b>{gemiddelde} €\\MWh</b>\n"
-                                f"⏱️ Aantal metingen: {len(history_prices)}"
-                            )
-                            stuur_telegram_bericht(bericht, chat_id)
+                        logging.info(f"📩 Commando /vandaag ontvangen van {chat_id}")
+                        stuur_telegram_bericht(genereer_dag_samenvatting(), chat_id)
                     
                     # 3. Commando /grafiek
                     elif tekst == "/grafiek":
-                        if len(history_prices) < 2:
-                            stuur_telegram_bericht("📉 Nog niet genoeg data voor een grafiek.", chat_id)
+                        logging.info(f"📩 Commando /grafiek ontvangen van {chat_id}")
+                        stuur_telegram_bericht("🎨 Grafiek wordt gemaakt...", chat_id)
+                        buf = genereer_grafiek_afbeelding()
+                        if buf:
+                            stuur_telegram_foto(buf, chat_id)
+                            buf.close()
                         else:
-                            stuur_telegram_bericht("🎨 Grafiek wordt gemaakt, ogenblik...", chat_id)
-                            
-                            try:
-                                # --- STAP A: Grafiek tekenen ---
-                                plt.figure(figsize=(10, 5)) # Breedte x Hoogte
-                                plt.plot(history_times, history_prices, color='blue', linewidth=2)
-                                
-                                # Opmaak
-                                plt.title(f"Onbalansprijzen ({datetime.now().strftime('%d-%m-%Y')})")
-                                plt.ylabel("Prijs (€\\MWh)")
-                                plt.grid(True, linestyle='--', alpha=0.7)
-                                
-                                # Tijd as mooi maken (uur:minuut)
-                                plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-                                plt.gcf().autofmt_xdate() # Draai de labels schuin als het druk is
-
-                                # Rode lijn bij 0 euro
-                                plt.axhline(0, color='red', linewidth=1, linestyle='-')
-
-                                # --- STAP B: Opslaan in geheugen (niet op schijf) ---
-                                buf = io.BytesIO()
-                                plt.savefig(buf, format='png')
-                                buf.seek(0) # Terugspoelen naar begin van bestand
-                                plt.close() # Belangrijk: Geheugen vrijgeven!
-
-                                # --- STAP C: Versturen ---
-                                stuur_telegram_foto(buf, chat_id)
-                                buf.close()
-                                
-                            except Exception as e:
-                                logging.error(f"Fout bij maken grafiek: {e}")
-                                stuur_telegram_bericht("❌ Kon grafiek niet genereren.", chat_id)
+                            stuur_telegram_bericht("📉 Te weinig data voor grafiek.", chat_id)
             
             time.sleep(1)
-            
-        except requests.exceptions.RequestException as e:
-            logging.error(f"❌ Telegram verbindingsfout: {e}")
+        except Exception as e:
+            logging.error(f"Telegram fout: {e}")
             time.sleep(5)
 
 def prijscontrole_loop():
@@ -361,70 +353,78 @@ def prijscontrole_loop():
     Slaat ook de prijzen op voor de statistieken.
     """
     # We moeten aangeven dat we de globale variabelen willen gebruiken
-    global history_prices, history_times, laatste_datum
-
+    global history_prices, history_times, laatste_datum, dagrapport_verstuurd
     laatste_prijs = None
-    # Houdt bij welke meldingen we al gestuurd hebben
-    status = {
-        'onder_50': False, 'onder_0': False, 'onder_min_50': False,
-        'zeer_laag': False, 'extreem_laag': False, 'zeer_hoog': False
-    }
+    status = {'onder_50': False, 'onder_0': False, 'onder_min_50': False, 'zeer_laag': False, 'extreem_laag': False, 'zeer_hoog': False}
 
     logging.info("⚡ Prijscontrole gestart...")
-
-    # Eerste check bij opstarten (reboot melding)
+    
+    # Startup bericht
     prijs, timestamp_obj = haal_onbalansprijs_op()
     if prijs is not None:
         tijd_str = f"{timestamp_obj.hour}:{timestamp_obj.minute:02}"
-        bericht = f'🔄 <b>Server herstart!</b>  {round(prijs)}  €\\MWh\n<i>{tijd_str}</i>'
         for chat_id in TELEGRAM_CHAT_IDS:
-            stuur_telegram_bericht(bericht, chat_id)
+            stuur_telegram_bericht(f'🔄 <b>Server herstart</b> {round(prijs)} €\\MWh\n<i>{tijd_str}</i>', chat_id)
 
     # Oneindige loop
     while True:
         try:
+            nu_belgie = datetime.now(BELGIUM_TZ)
             prijs, timestamp_obj = haal_onbalansprijs_op()
             
             if prijs is not None:
-                # --- NIEUW: DATA OPSLAAN VOOR GRAFIEK ---
-                vandaag = datetime.now().date()
-                
-                # Als de datum verandert, lijsten leegmaken
+                # 1. Resetten bij nieuwe dag
+                vandaag = nu_belgie.date()
                 if vandaag != laatste_datum:
                     history_prices = []
                     history_times = []
                     laatste_datum = vandaag
-                    logging.info("📅 Nieuwe dag: grafiek data gereset.")
+                    dagrapport_verstuurd = False # Reset vlag voor de nieuwe dag
+                    logging.info("📅 Nieuwe dag: data gereset.")
 
-                # Voeg prijs EN tijd toe
+                # 2. Data toevoegen
                 history_prices.append(prijs)
-                # We gebruiken datetime.now() voor de X-as zodat het mooi aansluit
-                history_times.append(datetime.now())
-                # ---------------------------
+                history_times.append(nu_belgie)
 
-                if timestamp_obj is not None:
+                # 3. Status updates (alarmen)
+                if timestamp_obj:
                     laatste_prijs, status = beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj)
-            
-            time.sleep(15) # Wacht 15 seconden voor volgende check
+
+            # 4. --- AUTOMATISCHE DAGAFSLUITING OM 23:59 ---
+            # We checken of het 23:59 is EN of we het rapport nog niet gestuurd hebben
+            if nu_belgie.hour == 23 and nu_belgie.minute == 59 and not dagrapport_verstuurd:
+                logging.info("🕛 Tijd voor dagafsluiting! Rapport versturen...")
+                
+                # Samenvatting maken
+                tekst = genereer_dag_samenvatting()
+                
+                # Grafiek maken
+                buf = genereer_grafiek_afbeelding()
+                
+                # Naar iedereen sturen
+                for chat_id in TELEGRAM_CHAT_IDS:
+                    stuur_telegram_bericht(tekst, chat_id)
+                    if buf:
+                        stuur_telegram_foto(buf, chat_id)
+                        buf.seek(0) # Buffer terugspoelen voor volgende chat_id
+                
+                if buf: buf.close()
+                
+                dagrapport_verstuurd = True # Zodat we het niet 15 sec later nog eens doen
+                logging.info("✅ Dagafsluiting succesvol verstuurd.")
+
+            time.sleep(15)
             
         except Exception as e:
-            logging.error(f"❌ Kritieke fout in prijsloop: {e}")
-            time.sleep(60) # Wacht 1 minuut bij een crash voordat we herstarten
+            logging.error(f"❌ Fout in loop: {e}")
+            time.sleep(60)
 
 def main():
-    """
-    Startpunt van het programma.
-    """
     if not TELEGRAM_BOT_TOKEN or not ELIA_API_URL:
-        logging.error("⛔ STOP: .env bestand niet correct ingevuld.")
+        logging.error("⛔ STOP: .env bestand niet correct.")
         return
 
-    # Start prijscontrole in de achtergrond (thread)
-    prijs_thread = threading.Thread(target=prijscontrole_loop)
-    prijs_thread.daemon = True
-    prijs_thread.start()
-
-    # Start Telegram luisteraar in de voorgrond
+    threading.Thread(target=prijscontrole_loop, daemon=True).start()
     monitor_telegram()
 
 if __name__ == "__main__":
