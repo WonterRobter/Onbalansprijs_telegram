@@ -116,17 +116,30 @@ def doe_http_aanroep(url, retries=3, timeout=10):
 def genereer_grafiek_afbeelding():
     """
     Maakt de grafiek en geeft de buffer terug.
-    Geeft None terug als er te weinig data is.
+    FILTERT de data: toont alleen kwartierwaarden (contractprijzen).
     """
     if len(history_prices) < 2:
         return None
 
     try:
-        plt.figure(figsize=(10, 5))
-        plt.plot(history_times, history_prices, color='blue', linewidth=2)
+        plot_times = []
+        plot_prices = []
         
-        plt.title(f"Onbalansprijzen ({datetime.now(BELGIUM_TZ).strftime('%d-%m-%Y')})")
-        plt.ylabel("Prijs (€\MWh)")
+        for t, p in zip(history_times, history_prices):
+            # Settlement check: is dit het einde van een kwartier?
+            if t.minute % 15 == 14 and t.second >= 30:
+                plot_times.append(t)
+                plot_prices.append(p)
+        if len(plot_prices) < 2:
+            return None
+        
+        plt.figure(figsize=(10, 5))
+        
+        # plotten nu de GEFILTERDE lijsten
+        plt.plot(plot_times, plot_prices, color='blue', linewidth=2, marker='o', markersize=4)
+        
+        plt.title(f"Settlement Prijzen ({datetime.now(BELGIUM_TZ).strftime('%d-%m-%Y')})")
+        plt.ylabel("Prijs (€/MWh)")
         plt.grid(True, linestyle='--', alpha=0.7)
         
         plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M', tz=BELGIUM_TZ))
@@ -154,7 +167,7 @@ def genereer_dag_samenvatting():
     gemiddelde = round(sum(history_prices) / len(history_prices))
     
     return (
-        f"🏁 <b>Dagafsluiting</b>\n\n"
+        f"🏁 <b>📊 Overzicht Vandaag</b>\n\n"
         f"📉 Laagste: <b>{laagste} €\MWh</b>\n"
         f"📈 Hoogste: <b>{hoogste} €\MWh</b>\n"
         f"⚖️ Gemiddeld: <b>{gemiddelde} €\MWh</b>\n"
