@@ -4,7 +4,7 @@ import logging
 import threading
 import io
 import statistics
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 # Externe bibliotheken
 import requests
@@ -127,10 +127,6 @@ def doe_http_aanroep(url, retries=3, timeout=10):
     return None
 
 def genereer_grafiek_afbeelding():
-    """
-    Maakt de grafiek en geeft de afbeelding terug in het geheugen.
-    Filtert op kwartierwaarden voor een schonere lijn.
-    """
     if len(history_prices) < 2:
         return None
 
@@ -138,19 +134,33 @@ def genereer_grafiek_afbeelding():
         plot_times = []
         plot_prices = []
         
-        # Filter data: alleen settlement punten (kwartierwaardes)
+        # We maken een tijdelijke dictionary om dubbele punten in dezelfde minuut te voorkomen
+        # Key = "14:14", Value = (tijd, prijs)
+        unieke_punten = {}
+
         for t, p in zip(history_times, history_prices):
-            if t.minute % 15 == 14 and t.second >= 30:
-                plot_times.append(t)
-                plot_prices.append(p)
-        
+            # De strenge filter: Alleen xx:14, xx:29, xx:44, xx:59
+            if t.minute % 15 == 14:
+                tijd_key = t.strftime('%H:%M')
+                unieke_punten[tijd_key] = (t, p)
+
+        # Nu de gefilterde punten weer in een lijst zetten
+        for key in unieke_punten:
+            t, p = unieke_punten[key]
+            plot_times.append(t)
+            plot_prices.append(p)
+
+        # Check: Hebben we na het filteren wel genoeg punten voor een lijn?
         if len(plot_prices) < 2:
+            logging.info(f"Grafiek: Wel data, maar na filteren nog te weinig kwartier-punten ({len(plot_prices)}). Even geduld.")
             return None
         
-        # Grafiek opbouwen
+        # --- De rest is standaard grafiek code ---
         plt.figure(figsize=(10, 5))
         plt.plot(plot_times, plot_prices, color='blue', linewidth=2, marker='o', markersize=4)
-        plt.title(f"Settlement Prijzen ({datetime.now(BELGIUM_TZ).strftime('%d-%m-%Y')})")
+        
+        titel_datum = datetime.now(BELGIUM_TZ).strftime('%d-%m-%Y')
+        plt.title(f"Settlement Prijzen ({titel_datum})")
         plt.ylabel("Prijs (€\\MWh)")
         plt.grid(True, linestyle='--', alpha=0.7)
         
