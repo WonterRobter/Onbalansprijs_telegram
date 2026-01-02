@@ -60,6 +60,7 @@ GRENS_ZEER_HOOG    = 400
 # 2. GLOBALE VARIABELEN (OPSLAG)
 # =============================================================================
 
+buffer_voor_db = []     # Buffer voor bulk opslag in DB
 history_prices = []     # Opslag voor prijzen (Y-as)
 history_times = []      # Opslag voor tijden (X-as)
 history_negatief_count = 0
@@ -397,11 +398,11 @@ def prijscontrole_loop():
     De motor van het script: haalt elke 15s de prijs op, 
     slaat elk uur op in DB, en stuurt om 23:59 rapport.
     """
-    global history_prices, history_times, laatste_datum, dagrapport_verstuurd
+    global history_prices, history_times, buffer_voor_db, laatste_datum, dagrapport_verstuurd
     global history_negatief_count, history_duur_count
     
     laatste_prijs = None
-    laatste_opgeslagen_tijd_id = None
+    laatste_minuut_id = None # Om te checken of de minuut voorbij is
     
     # Start status (alles False)
     status = {
@@ -424,98 +425,186 @@ def prijscontrole_loop():
 
     while True:
         try:
-            nu_belgie = datetime.now(BELGIUM_TZ)
+            nu = datetime.now(BELGIUM_TZ)
             prijs, timestamp_obj = haal_onbalansprijs_op()
             
-            if prijs is not None and timestamp_obj is not None:
-                huidige_tijd_id = timestamp_obj.strftime('%Y-%m-%d %H:%M')
-                is_nieuwe_minuut = (huidige_tijd_id != laatste_opgeslagen_tijd_id)
-                
-                if is_nieuwe_minuut:
-                    laatste_opgeslagen_tijd_id = huidige_tijd_id
-                    
-                    # 1. Dagwissel check
-                    vandaag = nu_belgie.date()
-                    if vandaag != laatste_datum:
-                        history_prices = []
-                        history_times = []
-                        history_negatief_count = 0  
-                        history_duur_count = 0      
-                        laatste_datum = vandaag
-                        dagrapport_verstuurd = False
-                        logging.info("📅 Nieuwe dag: geheugen en tellers gereset.")
+            if prijs is not None:
+                # 1. Check op nieuwe dag (reset tellers)
+                vandaag = nu.date()
+                if vandaag != laatste_datum:
+                    history_prices = []
+                    history_times = []
+                    buffer_voor_db = [] # Buffer ook leegmaken
+                    history_negatief_count = 0
+                    history_duur_count = 0
+                    laatste_datum = vandaag
+                    dagrapport_verstuurd = False
+                    logging.info("📅 Nieuwe dag: tellers gereset.")
 
-                    # 2. Data toevoegen
+                # 2. Opslaan in werkgeheugen (voor grafieken)
+                # We doen dit slim: we voegen het alleen toe aan de lijsten als het een nieuwe minuut is
+                # (Of elke 15 sec als je heel gedetailleerde grafieken in Telegram wilt, 
+                # maar voor de DB doen we het per minuut)
+                huidige_minuut_id = nu.strftime('%H:%M')
+                
+                if huidige_minuut_id != laatste_minuut_id:
+                    # == DIT IS HET "ELKE MINUUT" MOMENT ==
+                    laatste_minuut_id = huidige_minuut_id
+                    
+                    # A. Voeg toe aan live grafiek data
                     history_prices.append(prijs)
-                    history_times.append(timestamp_obj) 
-
-                    # 3. TELLERS BIJWERKEN (NIEUW)
-                    if prijs < 0:
-                        history_negatief_count += 1
-                    if prijs > 100: # Alles boven de 100 euro vinden we "duur"
-                        history_duur_count += 1
+                    history_times.append(nu)
                     
-                # Alarmen checken (blijft elke 15s)
-                if timestamp_obj:
-                    laatste_prijs, status = beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj)
-            
-            def sla_data_op():
-                laagste = round(min(history_prices))
-                hoogste = round(max(history_prices))
-                gemiddelde = round(sum(history_prices) / len(history_prices))
-                mediaan = round(statistics.median(history_prices)) # NIEUW
-                aantal = len(history_prices)
-                
-                # NIEUW: Zoek de tijdstippen erbij
-                idx_laag = history_prices.index(min(history_prices))
-                tijd_laag = history_times[idx_laag].strftime('%H:%M')
-                
-                idx_hoog = history_prices.index(max(history_prices))
-                tijd_hoog = history_times[idx_hoog].strftime('%H:%M')
-                
-                datum_str = nu_belgie.strftime('%Y-%m-%d')
-                
-                database_manager.sla_dag_op_in_db(
-                    datum_str, laagste, hoogste, gemiddelde, mediaan, aantal,
-                    history_negatief_count, history_duur_count,
-                    tijd_laag, tijd_hoog
-                )
+                    # B. Update tellers
+                    if prijs < 0: history_negatief_count += 1
+                    if prijs > 100: history_duur_count += 1
+                    
+                    # C. Voeg toe aan de BUFFER voor de database
+                    # We slaan op: (datum, tijd, waarde)
+                    datum_str = nu.strftime('%Y-%m-%d')
+                    buffer_voor_db.append( (datum_str, huidige_minuut_id, prijs) )
+                    
+                    logging.info(f"⏱️ Minuutmeting gebufferd: {prijs}")
 
-            # Tussentijdse opslag (Elke 15 min)
-            if nu_belgie.minute % 15 == 0 and nu_belgie.second < 20 and history_prices:
-                 sla_data_op()
-                 logging.info("💾 Tussentijdse database update uitgevoerd.")
+                # 3. Status updates (blijft elke 15s draaien voor snelle alarmen)
+                laatste_prijs, status = beheer_prijsstatus(prijs, laatste_prijs, status, nu)
 
-            # Dagafsluiting
-            if nu_belgie.hour == 23 and nu_belgie.minute == 59 and not dagrapport_verstuurd:
+                # 4. DATABASE UPDATE (ALLEEN OM DE 15 MINUTEN)
+                if nu.minute % 15 == 0 and nu.second < 20:
+                    # Check of we data hebben om op te slaan
+                    if buffer_voor_db:
+                        logging.info("💾 15 minuten voorbij: Buffer wegschrijven naar DB...")
+                        
+                        # Bereken dagstatistieken voor Tabel 1
+                        laagste = round(min(history_prices))
+                        hoogste = round(max(history_prices))
+                        gem = round(sum(history_prices) / len(history_prices))
+                        mediaan = round(statistics.median(history_prices))
+                        
+                        idx_laag = history_prices.index(min(history_prices))
+                        tijd_laag = history_times[idx_laag].strftime('%H:%M')
+                        idx_hoog = history_prices.index(max(history_prices))
+                        tijd_hoog = history_times[idx_hoog].strftime('%H:%M')
+                        
+                        # Maak een pakketje van de dagdata
+                        dag_data = {
+                            'datum': nu.strftime('%Y-%m-%d'),
+                            'laagste': laagste, 'hoogste': hoogste,
+                            'gemiddelde': gem, 'mediaan': mediaan,
+                            'aantal': len(history_prices),
+                            'aantal_negatief': history_negatief_count,
+                            'aantal_duur': history_duur_count,
+                            'tijd_laag': tijd_laag, 'tijd_hoog': tijd_hoog
+                        }
+                        
+                        # Stuur ALLES (buffer + dagdata) naar de database manager
+                        database_manager.sla_buffer_en_dag_op(dag_data, buffer_voor_db)
+                        
+                        # BELANGRIJK: Maak de buffer leeg na opslaan!
+                        buffer_voor_db = []
+                        
+                        logging.info("✅ Database update succesvol. Buffer geleegd.")
+                        time.sleep(20) # Even wachten zodat we niet dubbel opslaan in dezelfde minuut
+                        
+            # 5. DAGAFSLUITING (OM 23:59)
+            if nu.hour == 23 and nu.minute == 59 and not dagrapport_verstuurd:
                 logging.info("🕛 Tijd voor dagafsluiting!")
-                if history_prices: sla_data_op()
-                
+
+                # A. Eerst nog even snel de database bijwerken (zodat de laatste minuten ook vastliggen)
+                if history_prices and buffer_voor_db:
+                    try:
+                        # Bereken statistieken voor de DB
+                        laagste = round(min(history_prices))
+                        hoogste = round(max(history_prices))
+                        gem = round(sum(history_prices) / len(history_prices))
+                        mediaan = round(statistics.median(history_prices))
+                        
+                        idx_laag = history_prices.index(min(history_prices))
+                        tijd_laag = history_times[idx_laag].strftime('%H:%M')
+                        idx_hoog = history_prices.index(max(history_prices))
+                        tijd_hoog = history_times[idx_hoog].strftime('%H:%M')
+
+                        dag_data = {
+                            'datum': nu.strftime('%Y-%m-%d'),
+                            'laagste': laagste, 'hoogste': hoogste,
+                            'gemiddelde': gem, 'mediaan': mediaan,
+                            'aantal': len(history_prices),
+                            'aantal_negatief': history_negatief_count,
+                            'aantal_duur': history_duur_count,
+                            'tijd_laag': tijd_laag, 'tijd_hoog': tijd_hoog
+                        }
+                        
+                        # Opslaan!
+                        database_manager.sla_buffer_en_dag_op(dag_data, buffer_voor_db)
+                        buffer_voor_db = [] # Buffer legen
+                        logging.info("💾 Laatste save voor middernacht voltooid.")
+                    except Exception as e:
+                        logging.error(f"Fout bij save dagafsluiting: {e}")
+
+                # B. Telegram Rapport Sturen
                 tekst = genereer_dag_samenvatting()
                 buf = genereer_grafiek_afbeelding()
+
                 for chat_id in TELEGRAM_CHAT_IDS:
                     stuur_telegram_bericht(tekst, chat_id)
                     if buf:
-                        stuur_telegram_foto(buf, chat_id); buf.seek(0)
+                        stuur_telegram_foto(buf, chat_id)
+                        buf.seek(0)
+
                 if buf: buf.close()
                 dagrapport_verstuurd = True
                 logging.info("✅ Dagafsluiting verstuurd.")
+            
+            # Reset vlaggetje na middernacht (00:00:xx)
+            if nu.hour == 0 and dagrapport_verstuurd:
+                dagrapport_verstuurd = False
+            # Dagafsluiting code (standaard)
+            # ...
 
-            time.sleep(15)
+            time.sleep(15) # Korte slaap voor de volgende check
         except Exception as e:
-            logging.error(f"❌ Kritieke fout in prijsloop: {e}"); time.sleep(60)
+            logging.error(f"Loop fout: {e}")
+            time.sleep(30)
 
 # =============================================================================
 # 7. MAIN STARTPUNT
 # =============================================================================
 
 def main():
+    global history_prices, history_times, history_negatief_count, history_duur_count
     if not TELEGRAM_BOT_TOKEN or not ELIA_API_URL:
         logging.error("⛔ STOP: .env bestand mist variabelen of bestaat niet.")
         return
     
     # NIEUW: Zorg dat de database klaarstaat
     database_manager.init_database()
+    
+    # 1. SCHOONMAAK (1 maand regel)
+    database_manager.opruimen_oude_data()
+    
+    # 2. HERSTEL (Het 16:00 probleem oplossen)
+    logging.info("♻️ Data van vandaag herstellen uit DB...")
+    vandaag_str = datetime.now(BELGIUM_TZ).strftime('%Y-%m-%d')
+    
+    oude_data = database_manager.haal_vandaag_op(vandaag_str)
+    
+    if oude_data:
+        logging.info(f"🔄 {len(oude_data)} metingen gevonden. Herstellen...")
+        for tijd_str, prijs in oude_data:
+            # Herstel de lijsten
+            u, m = map(int, tijd_str.split(':'))
+            tijd_obj = datetime.now(BELGIUM_TZ).replace(hour=u, minute=m, second=0, microsecond=0)
+            
+            history_prices.append(prijs)
+            history_times.append(tijd_obj)
+            
+            # Herstel de tellers (ongeveer)
+            if prijs < 0: history_negatief_count += 1
+            if prijs > 100: history_duur_count += 1
+        
+        logging.info("✅ Geheugen succesvol hersteld! Dagstatistieken lopen door.")
+    else:
+        logging.info("✨ Geen data van vandaag gevonden. Start blanco.")
     
     # Start de prijscontrole in een aparte thread (zodat ze tegelijk draaien)
     prijs_thread = threading.Thread(target=prijscontrole_loop, daemon=True)
