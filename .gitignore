@@ -16,3 +16,7 @@ __pycache__/
 # OS bestanden
 .DS_Store
 Thumbs.db
+
+database.py
+test_database.py
+*.db
