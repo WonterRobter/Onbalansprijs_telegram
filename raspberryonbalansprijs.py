@@ -3,6 +3,7 @@ import time
 import logging
 import threading
 import io
+import statistics
 from datetime import datetime, date
 
 # Externe bibliotheken
@@ -10,6 +11,9 @@ import requests
 import pytz
 import matplotlib
 from dotenv import load_dotenv
+
+# Importeer je aparte database bestand
+import database_manager
 
 # Matplotlib instellingen (grafieken zonder scherm)
 matplotlib.use('Agg') 
@@ -58,6 +62,8 @@ GRENS_ZEER_HOOG    = 400
 
 history_prices = []     # Opslag voor prijzen (Y-as)
 history_times = []      # Opslag voor tijden (X-as)
+history_negatief_count = 0
+history_duur_count = 0
 laatste_datum = datetime.now(BELGIUM_TZ).date()
 dagrapport_verstuurd = False 
 
@@ -144,7 +150,6 @@ def genereer_grafiek_afbeelding():
         # Grafiek opbouwen
         plt.figure(figsize=(10, 5))
         plt.plot(plot_times, plot_prices, color='blue', linewidth=2, marker='o', markersize=4)
-        
         plt.title(f"Settlement Prijzen ({datetime.now(BELGIUM_TZ).strftime('%d-%m-%Y')})")
         plt.ylabel("Prijs (€\\MWh)")
         plt.grid(True, linestyle='--', alpha=0.7)
@@ -167,6 +172,8 @@ def genereer_grafiek_afbeelding():
 
 def genereer_dag_samenvatting():
     """ Berekent statistieken (min, max, gem) voor het dagoverzicht. """
+    global history_negatief_count, history_duur_count
+    
     if not history_prices:
         return "📉 Nog geen metingen verzameld vandaag."
     
@@ -178,8 +185,10 @@ def genereer_dag_samenvatting():
         f"🏁 <b>📊 Overzicht Vandaag</b>\n\n"
         f"📉 Laagste: <b>{laagste} €\\MWh</b>\n"
         f"📈 Hoogste: <b>{hoogste} €\\MWh</b>\n"
-        f"⚖️ Gemiddeld: <b>{gemiddelde} €\\MWh</b>\n"
-        f"⏱️ Aantal metingen: {len(history_prices)}"
+        f"⚖️ Gemiddeld: <b>{gemiddelde} €\\MWh</b>\n\n"
+        f"⏱️ Negatief: <b>{history_negatief_count} min</b>\n"
+        f"💸 Duur (>100): <b>{history_duur_count} min</b>\n"
+        f"📊 Totaal metingen: {len(history_prices)}"
     )
 
 # =============================================================================
@@ -376,11 +385,14 @@ def monitor_telegram():
 def prijscontrole_loop():
     """ 
     De motor van het script: haalt elke 15s de prijs op, 
-    checkt alarmen en verstuurt het dagrapport.
+    slaat elk uur op in DB, en stuurt om 23:59 rapport.
     """
     global history_prices, history_times, laatste_datum, dagrapport_verstuurd
+    global history_negatief_count, history_duur_count
     
     laatste_prijs = None
+    laatste_opgeslagen_tijd_id = None
+    
     # Start status (alles False)
     status = {
         'onder_50': False,
@@ -405,46 +417,83 @@ def prijscontrole_loop():
             nu_belgie = datetime.now(BELGIUM_TZ)
             prijs, timestamp_obj = haal_onbalansprijs_op()
             
-            if prijs is not None:
-                # 1. Dagwissel check (Reset data om middernacht)
-                vandaag = nu_belgie.date()
-                if vandaag != laatste_datum:
-                    history_prices = []
-                    history_times = []
-                    laatste_datum = vandaag
-                    dagrapport_verstuurd = False
-                    logging.info("📅 Nieuwe dag: geheugen gereset.")
+            if prijs is not None and timestamp_obj is not None:
+                huidige_tijd_id = timestamp_obj.strftime('%Y-%m-%d %H:%M')
+                is_nieuwe_minuut = (huidige_tijd_id != laatste_opgeslagen_tijd_id)
+                
+                if is_nieuwe_minuut:
+                    laatste_opgeslagen_tijd_id = huidige_tijd_id
+                    
+                    # 1. Dagwissel check
+                    vandaag = nu_belgie.date()
+                    if vandaag != laatste_datum:
+                        history_prices = []
+                        history_times = []
+                        history_negatief_count = 0  
+                        history_duur_count = 0      
+                        laatste_datum = vandaag
+                        dagrapport_verstuurd = False
+                        logging.info("📅 Nieuwe dag: geheugen en tellers gereset.")
 
-                # 2. Data toevoegen aan geschiedenis
-                history_prices.append(prijs)
-                history_times.append(nu_belgie)
+                    # 2. Data toevoegen
+                    history_prices.append(prijs)
+                    history_times.append(timestamp_obj) 
 
-                # 3. Status updates & Alarmen
+                    # 3. TELLERS BIJWERKEN (NIEUW)
+                    if prijs < 0:
+                        history_negatief_count += 1
+                    if prijs > 100: # Alles boven de 100 euro vinden we "duur"
+                        history_duur_count += 1
+                    
+                # Alarmen checken (blijft elke 15s)
                 if timestamp_obj:
                     laatste_prijs, status = beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj)
+            
+            def sla_data_op():
+                laagste = round(min(history_prices))
+                hoogste = round(max(history_prices))
+                gemiddelde = round(sum(history_prices) / len(history_prices))
+                mediaan = round(statistics.median(history_prices)) # NIEUW
+                aantal = len(history_prices)
+                
+                # NIEUW: Zoek de tijdstippen erbij
+                idx_laag = history_prices.index(min(history_prices))
+                tijd_laag = history_times[idx_laag].strftime('%H:%M')
+                
+                idx_hoog = history_prices.index(max(history_prices))
+                tijd_hoog = history_times[idx_hoog].strftime('%H:%M')
+                
+                datum_str = nu_belgie.strftime('%Y-%m-%d')
+                
+                database_manager.sla_dag_op_in_db(
+                    datum_str, laagste, hoogste, gemiddelde, mediaan, aantal,
+                    history_negatief_count, history_duur_count,
+                    tijd_laag, tijd_hoog
+                )
 
-            # 4. Dagafsluiting (Rapport sturen om 23:59)
+            # Tussentijdse opslag (Elke 15 min)
+            if nu_belgie.minute % 15 == 0 and nu_belgie.second < 20 and history_prices:
+                 sla_data_op()
+                 logging.info("💾 Tussentijdse database update uitgevoerd.")
+
+            # Dagafsluiting
             if nu_belgie.hour == 23 and nu_belgie.minute == 59 and not dagrapport_verstuurd:
                 logging.info("🕛 Tijd voor dagafsluiting!")
+                if history_prices: sla_data_op()
                 
                 tekst = genereer_dag_samenvatting()
                 buf = genereer_grafiek_afbeelding()
-                
                 for chat_id in TELEGRAM_CHAT_IDS:
                     stuur_telegram_bericht(tekst, chat_id)
                     if buf:
-                        stuur_telegram_foto(buf, chat_id)
-                        buf.seek(0)
-                
+                        stuur_telegram_foto(buf, chat_id); buf.seek(0)
                 if buf: buf.close()
                 dagrapport_verstuurd = True
                 logging.info("✅ Dagafsluiting verstuurd.")
 
             time.sleep(15)
-            
         except Exception as e:
-            logging.error(f"❌ Kritieke fout in prijsloop: {e}")
-            time.sleep(60)
+            logging.error(f"❌ Kritieke fout in prijsloop: {e}"); time.sleep(60)
 
 # =============================================================================
 # 7. MAIN STARTPUNT
@@ -454,7 +503,10 @@ def main():
     if not TELEGRAM_BOT_TOKEN or not ELIA_API_URL:
         logging.error("⛔ STOP: .env bestand mist variabelen of bestaat niet.")
         return
-
+    
+    # NIEUW: Zorg dat de database klaarstaat
+    database_manager.init_database()
+    
     # Start de prijscontrole in een aparte thread (zodat ze tegelijk draaien)
     prijs_thread = threading.Thread(target=prijscontrole_loop, daemon=True)
     prijs_thread.start()
