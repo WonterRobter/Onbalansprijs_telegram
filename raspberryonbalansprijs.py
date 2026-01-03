@@ -590,7 +590,7 @@ def main():
             
             # Herstel de tellers (ongeveer)
             if prijs < 0: history_negatief_count += 1
-            if prijs > 100: history_duur_count += 1
+            if prijs > 150: history_duur_count += 1
         
         logging.info("✅ Geheugen succesvol hersteld! Dagstatistieken lopen door.")
     else:
