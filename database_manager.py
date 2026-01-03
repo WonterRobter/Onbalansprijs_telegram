@@ -1,12 +1,13 @@
 import sqlite3
 import logging
 from datetime import datetime, timedelta
+import config
 
-DB_BESTAND = 'onbalans_historiek.db'
+#OLD: DB_BESTAND = 'onbalans_historiek.db'
 
 def init_database():
     try:
-        conn = sqlite3.connect(DB_BESTAND)
+        conn = sqlite3.connect(config.DB_BESTAND)
         c = conn.cursor()
         
         # Tabel 1: Dagstatistieken (1 rij per dag)
@@ -47,7 +48,7 @@ def sla_buffer_en_dag_op(dag_data, minuut_buffer):
     2. Hij update de dagstatistieken.
     """
     try:
-        conn = sqlite3.connect(DB_BESTAND)
+        conn = sqlite3.connect(config.DB_BESTAND)
         c = conn.cursor()
         
         # 1. Bulk insert van de buffer (de losse minuten)
@@ -80,7 +81,7 @@ def haal_vandaag_op(datum_str):
     Haalt alle minuut-metingen van vandaag op uit de DB om het geheugen te herstellen.
     """
     try:
-        conn = sqlite3.connect(DB_BESTAND)
+        conn = sqlite3.connect(config.DB_BESTAND)
         c = conn.cursor()
         c.execute("SELECT tijd, waarde FROM metingen_detail WHERE datum = ? ORDER BY tijd ASC", (datum_str,))
         rijen = c.fetchall() # Geeft lijst terug: [('00:01', 50.0), ('00:02', 51.0)...]
@@ -93,8 +94,8 @@ def haal_vandaag_op(datum_str):
 def opruimen_oude_data():
     """ Verwijdert detail-metingen ouder dan 1 maand """
     try:
-        grens = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-        conn = sqlite3.connect(DB_BESTAND)
+        grens = (datetime.now() - timedelta(days=config.AANTAL_DAGEN_BEWAREN)).strftime('%Y-%m-%d')
+        conn = sqlite3.connect(config.DB_BESTAND)
         c = conn.cursor()
         c.execute("DELETE FROM metingen_detail WHERE datum < ?", (grens,))
         aantal = c.rowcount

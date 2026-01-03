@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 # Importeer je aparte database bestand
 import database_manager
+import config
 
 # Matplotlib instellingen (grafieken zonder scherm)
 matplotlib.use('Agg') 
@@ -45,16 +46,6 @@ TELEGRAM_CHAT_IDS = [id.strip() for id in TELEGRAM_CHAT_IDS_RAW.split(",") if id
 # --- TIJD & SESSIE ---
 BELGIUM_TZ = pytz.timezone('Europe/Brussels')
 session = requests.Session()
-
-# --- PRIJSGRENSWAARDEN (Instellingen) ---
-# Pas deze waardes aan om de alarmen te finetunen
-GRENS_EXTREEM_LAAG = -500
-GRENS_ZEER_LAAG    = -150
-GRENS_LAAG_MIN_50  = -50
-GRENS_NEGATIEF     = 0
-GRENS_GOEDKOOP     = 50
-GRENS_HERSTEL      = 60
-GRENS_ZEER_HOOG    = 400
 
 # =============================================================================
 # 2. GLOBALE VARIABELEN (OPSLAG)
@@ -244,7 +235,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
     # --- STATUS CHECKS ---
     
     # 1. Extreem Laag
-    if prijs < GRENS_EXTREEM_LAAG and not status['extreem_laag']:
+    if prijs < config.GRENS_EXTREEM_LAAG and not status['extreem_laag']:
         meld("EXTREEM LAGE PRIJS", "🧊")
         status.update({
             'extreem_laag': True,
@@ -257,7 +248,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         return prijs, status
         
     # 2. Zeer Laag
-    if prijs < GRENS_ZEER_LAAG and not status['zeer_laag']:
+    if prijs < config.GRENS_ZEER_LAAG and not status['zeer_laag']:
         meld("ZÉÉR LAGE PRIJS", "❄️")
         status.update({
             'zeer_laag': True,
@@ -269,7 +260,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         return prijs, status
 
     # 3. Zeer Hoog
-    if prijs > GRENS_ZEER_HOOG and not status['zeer_hoog']:
+    if prijs > config.GRENS_ZEER_HOOG and not status['zeer_hoog']:
         meld("ZÉÉR HOGE PRIJS", "🚨")
         status.update({
             'zeer_hoog': True,
@@ -282,7 +273,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         return prijs, status
 
     # 4. Onder -50
-    if prijs < GRENS_LAAG_MIN_50 and not status['onder_min_50']:
+    if prijs < config.GRENS_LAAG_MIN_50 and not status['onder_min_50']:
         meld("Prijs onder -50", "🌟")
         status.update({
             'onder_min_50': True,
@@ -293,7 +284,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         return prijs, status
 
     # 5. Negatief (onder 0)
-    if prijs < GRENS_NEGATIEF and not status['onder_0']:
+    if prijs < config.GRENS_NEGATIEF and not status['onder_0']:
         meld("Prijs onder 0", "✅")
         status.update({
             'onder_0': True,
@@ -303,7 +294,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         return prijs, status
 
     # 6. Goedkoop (onder 50)
-    if GRENS_NEGATIEF < prijs < GRENS_GOEDKOOP and not status['onder_50']:
+    if config.GRENS_NEGATIEF < prijs < config.GRENS_GOEDKOOP and not status['onder_50']:
         meld("Prijs onder 50", "⚠️")
         status.update({
             'onder_50': True,
@@ -314,7 +305,7 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
     # --- HERSTEL MELDINGEN ---
     
     # Herstel boven 50
-    if prijs >= GRENS_HERSTEL and status['onder_50']:
+    if prijs >= config.GRENS_HERSTEL and status['onder_50']:
         meld("Prijs weer boven 50", "📈")
         status.update({
             'onder_50': False,
@@ -323,14 +314,14 @@ def beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj):
         })
 
     # Herstel boven 0
-    elif prijs >= GRENS_NEGATIEF and status['onder_0']:
+    elif prijs >= config.GRENS_NEGATIEF and status['onder_0']:
         meld("Prijs weer positief", "⚠️")
         status.update({
             'onder_0': False,
             'onder_min_50': False
         })
     # Herstel boven -50
-    elif prijs >= GRENS_LAAG_MIN_50 and status['onder_min_50']:
+    elif prijs >= config.GRENS_LAAG_MIN_50 and status['onder_min_50']:
         meld("Prijs weer boven -50", "☑️")
         status.update({'onder_min_50': False})
 
@@ -457,8 +448,8 @@ def prijscontrole_loop():
                     history_times.append(timestamp_obj) 
                     
                     # B. Update tellers
-                    if prijs < 0: history_negatief_count += 1
-                    if prijs > 100: history_duur_count += 1
+                    if prijs < config.GRENS_NEGATIEF: history_negatief_count += 1
+                    if prijs > config.GRENS_DUUR: history_duur_count += 1
                     
                     # C. Buffer vullen met de JUISTE tijd
                     datum_str = timestamp_obj.strftime('%Y-%m-%d')
@@ -589,8 +580,8 @@ def main():
             history_times.append(tijd_obj)
             
             # Herstel de tellers (ongeveer)
-            if prijs < 0: history_negatief_count += 1
-            if prijs > 150: history_duur_count += 1
+            if prijs < config.GRENS_NEGATIEF: history_negatief_count += 1
+            if prijs > config.GRENS_DUUR: history_duur_count += 1
         
         logging.info("✅ Geheugen succesvol hersteld! Dagstatistieken lopen door.")
     else:
