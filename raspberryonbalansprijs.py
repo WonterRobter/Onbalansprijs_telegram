@@ -30,7 +30,7 @@ load_dotenv()
 # Logging configuratie (wat zie je in de console)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
+    format="%(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
@@ -395,8 +395,8 @@ def monitor_telegram():
 
 def prijscontrole_loop():
     """ 
-    De motor van het script: haalt elke 15s de prijs op, 
-    slaat elk uur op in DB, en stuurt om 23:59 rapport.
+    De motor van het script: haalt elke 15s de prijs op.
+    AANGEPAST: Gebruikt nu API-tijd in plaats van Systeem-tijd voor opslag.
     """
     global history_prices, history_times, buffer_voor_db, laatste_datum, dagrapport_verstuurd
     global history_negatief_count, history_duur_count
@@ -425,57 +425,56 @@ def prijscontrole_loop():
 
     while True:
         try:
+            # We houden 'nu' alleen nog voor systeem-taken (zoals middernacht checken)
             nu = datetime.now(BELGIUM_TZ)
             prijs, timestamp_obj = haal_onbalansprijs_op()
             
-            if prijs is not None:
-                # 1. Check op nieuwe dag (reset tellers)
-                vandaag = nu.date()
-                if vandaag != laatste_datum:
+            if prijs is not None and timestamp_obj is not None:
+                
+                # 1. Check op nieuwe dag (op basis van API tijd, dat is wel zo zuiver)
+                datum_api = timestamp_obj.date()
+                if datum_api != laatste_datum:
                     history_prices = []
                     history_times = []
                     buffer_voor_db = [] # Buffer ook leegmaken
                     history_negatief_count = 0
                     history_duur_count = 0
-                    laatste_datum = vandaag
+                    laatste_datum = datum_api
                     dagrapport_verstuurd = False
-                    logging.info("📅 Nieuwe dag: tellers gereset.")
+                    logging.info(f"📅 Nieuwe dag ({datum_api}): tellers gereset.")
 
-                # 2. Opslaan in werkgeheugen (voor grafieken)
-                # We doen dit slim: we voegen het alleen toe aan de lijsten als het een nieuwe minuut is
-                # (Of elke 15 sec als je heel gedetailleerde grafieken in Telegram wilt, 
-                # maar voor de DB doen we het per minuut)
-                huidige_minuut_id = nu.strftime('%H:%M')
+                # 2. Opslaan in werkgeheugen
+                # BELANGRIJK: We kijken nu naar de minuut van de API (timestamp_obj)
+                huidige_minuut_id = timestamp_obj.strftime('%H:%M')
                 
+                # Als de API een nieuwe minuut doorgeeft die we nog niet hadden:
                 if huidige_minuut_id != laatste_minuut_id:
                     # == DIT IS HET "ELKE MINUUT" MOMENT ==
                     laatste_minuut_id = huidige_minuut_id
                     
-                    # A. Voeg toe aan live grafiek data
+                    # A. Voeg toe aan live grafiek data (gebruik API tijd!)
                     history_prices.append(prijs)
-                    history_times.append(nu)
+                    history_times.append(timestamp_obj) 
                     
                     # B. Update tellers
                     if prijs < 0: history_negatief_count += 1
                     if prijs > 100: history_duur_count += 1
                     
-                    # C. Voeg toe aan de BUFFER voor de database
-                    # We slaan op: (datum, tijd, waarde)
-                    datum_str = nu.strftime('%Y-%m-%d')
+                    # C. Buffer vullen met de JUISTE tijd
+                    datum_str = timestamp_obj.strftime('%Y-%m-%d')
                     buffer_voor_db.append( (datum_str, huidige_minuut_id, prijs) )
                     
-                    logging.info(f"⏱️ Minuutmeting gebufferd: {prijs}")
+                    logging.info(f"⏱️ Minuutmeting gebufferd: {prijs} (Tijdstip: {huidige_minuut_id})")
 
-                # 3. Status updates (blijft elke 15s draaien voor snelle alarmen)
-                laatste_prijs, status = beheer_prijsstatus(prijs, laatste_prijs, status, nu)
+                # 3. Status updates (Alarmen mogen wel direct afgaan)
+                laatste_prijs, status = beheer_prijsstatus(prijs, laatste_prijs, status, timestamp_obj)
 
-                # 4. DATABASE UPDATE (ALLEEN OM DE 15 MINUTEN)
+                # 4. DATABASE UPDATE (Checken we wel op basis van systeemklok 'nu' om de 15 min)
                 if nu.minute % 15 == 0 and nu.second < 20:
-                    # Check of we data hebben om op te slaan
                     if buffer_voor_db:
                         logging.info("💾 15 minuten voorbij: Buffer wegschrijven naar DB...")
                         
-                        # Bereken dagstatistieken voor Tabel 1
+                        # Bereken statistieken
                         laagste = round(min(history_prices))
                         hoogste = round(max(history_prices))
                         gem = round(sum(history_prices) / len(history_prices))
@@ -486,9 +485,11 @@ def prijscontrole_loop():
                         idx_hoog = history_prices.index(max(history_prices))
                         tijd_hoog = history_times[idx_hoog].strftime('%H:%M')
                         
-                        # Maak een pakketje van de dagdata
+                        # We gebruiken de datum van de API data voor de statistiek
+                        statistiek_datum = history_times[-1].strftime('%Y-%m-%d')
+
                         dag_data = {
-                            'datum': nu.strftime('%Y-%m-%d'),
+                            'datum': statistiek_datum,
                             'laagste': laagste, 'hoogste': hoogste,
                             'gemiddelde': gem, 'mediaan': mediaan,
                             'aantal': len(history_prices),
@@ -497,35 +498,30 @@ def prijscontrole_loop():
                             'tijd_laag': tijd_laag, 'tijd_hoog': tijd_hoog
                         }
                         
-                        # Stuur ALLES (buffer + dagdata) naar de database manager
                         database_manager.sla_buffer_en_dag_op(dag_data, buffer_voor_db)
-                        
-                        # BELANGRIJK: Maak de buffer leeg na opslaan!
-                        buffer_voor_db = []
-                        
-                        logging.info("✅ Database update succesvol. Buffer geleegd.")
-                        time.sleep(20) # Even wachten zodat we niet dubbel opslaan in dezelfde minuut
-                        
-            # 5. DAGAFSLUITING (OM 23:59)
+                        buffer_voor_db = [] 
+                        logging.info("✅ Database update succesvol.")
+                        time.sleep(20)
+
+            # 5. DAGAFSLUITING (Op basis van systeemklok, want we willen om 23:59 sturen)
             if nu.hour == 23 and nu.minute == 59 and not dagrapport_verstuurd:
                 logging.info("🕛 Tijd voor dagafsluiting!")
-
-                # A. Eerst nog even snel de database bijwerken (zodat de laatste minuten ook vastliggen)
+                
                 if history_prices and buffer_voor_db:
                     try:
-                        # Bereken statistieken voor de DB
+                        # (Zelfde logica als hierboven voor laatste save)
                         laagste = round(min(history_prices))
                         hoogste = round(max(history_prices))
                         gem = round(sum(history_prices) / len(history_prices))
                         mediaan = round(statistics.median(history_prices))
-                        
                         idx_laag = history_prices.index(min(history_prices))
                         tijd_laag = history_times[idx_laag].strftime('%H:%M')
                         idx_hoog = history_prices.index(max(history_prices))
                         tijd_hoog = history_times[idx_hoog].strftime('%H:%M')
+                        statistiek_datum = history_times[-1].strftime('%Y-%m-%d')
 
                         dag_data = {
-                            'datum': nu.strftime('%Y-%m-%d'),
+                            'datum': statistiek_datum,
                             'laagste': laagste, 'hoogste': hoogste,
                             'gemiddelde': gem, 'mediaan': mediaan,
                             'aantal': len(history_prices),
@@ -537,9 +533,8 @@ def prijscontrole_loop():
                         # Opslaan!
                         database_manager.sla_buffer_en_dag_op(dag_data, buffer_voor_db)
                         buffer_voor_db = [] # Buffer legen
-                        logging.info("💾 Laatste save voor middernacht voltooid.")
                     except Exception as e:
-                        logging.error(f"Fout bij save dagafsluiting: {e}")
+                        logging.error(f"Save fout: {e}")
 
                 # B. Telegram Rapport Sturen
                 tekst = genereer_dag_samenvatting()
@@ -548,18 +543,13 @@ def prijscontrole_loop():
                 for chat_id in TELEGRAM_CHAT_IDS:
                     stuur_telegram_bericht(tekst, chat_id)
                     if buf:
-                        stuur_telegram_foto(buf, chat_id)
-                        buf.seek(0)
-
+                        stuur_telegram_foto(buf, chat_id); buf.seek(0)
                 if buf: buf.close()
                 dagrapport_verstuurd = True
-                logging.info("✅ Dagafsluiting verstuurd.")
             
             # Reset vlaggetje na middernacht (00:00:xx)
             if nu.hour == 0 and dagrapport_verstuurd:
                 dagrapport_verstuurd = False
-            # Dagafsluiting code (standaard)
-            # ...
 
             time.sleep(15) # Korte slaap voor de volgende check
         except Exception as e:
