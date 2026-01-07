@@ -1,8 +1,6 @@
+flask
+pandas
 requests
 python-dotenv
-pytz
-flask
 matplotlib
-
-pandas
-pip install 
+pytz
