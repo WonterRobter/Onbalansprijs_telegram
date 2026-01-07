@@ -3,3 +3,6 @@ python-dotenv
 pytz
 flask
 matplotlib
+
+pandas
+pip install 

@@ -20,3 +20,4 @@ Thumbs.db
 database.py
 test_database.py
 *.db
+*.json

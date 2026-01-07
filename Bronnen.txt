@@ -34,3 +34,6 @@ Server & Raspberry Pi:
 
 AI Ondersteuning:
 - Google Gemini: https://gemini.google.com/
+
+
+Optioneel : https://streamlit.io/

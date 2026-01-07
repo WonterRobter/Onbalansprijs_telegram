@@ -17,4 +17,4 @@ GRENS_ZEER_HOOG    = 500
 
 # --- TELLERS ---
 # Boven welke prijs tellen we het als "Duur"?
-GRENS_DUUR = 125
+GRENS_DUUR = 100

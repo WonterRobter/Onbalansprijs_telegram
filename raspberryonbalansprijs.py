@@ -4,6 +4,7 @@ import logging
 import threading
 import io
 import statistics
+import json
 from datetime import datetime, date, timedelta
 
 # Externe bibliotheken
@@ -440,10 +441,9 @@ def prijscontrole_loop():
                 
                 # Als de API een nieuwe minuut doorgeeft die we nog niet hadden:
                 if huidige_minuut_id != laatste_minuut_id:
-                    # == DIT IS HET "ELKE MINUUT" MOMENT ==
                     laatste_minuut_id = huidige_minuut_id
                     
-                    # A. Voeg toe aan live grafiek data (gebruik API tijd!)
+                    # A. Voeg toe aan live lijsten
                     history_prices.append(prijs)
                     history_times.append(timestamp_obj) 
                     
@@ -451,10 +451,23 @@ def prijscontrole_loop():
                     if prijs < config.GRENS_NEGATIEF: history_negatief_count += 1
                     if prijs > config.GRENS_DUUR: history_duur_count += 1
                     
-                    # C. Buffer vullen met de JUISTE tijd
+                    # C. Buffer vullen
                     datum_str = timestamp_obj.strftime('%Y-%m-%d')
                     buffer_voor_db.append( (datum_str, huidige_minuut_id, prijs) )
                     
+                    # === NIEUW: SCHRIJF BUFFER NAAR RAM (GEEN SD SLIJTAGE) ===
+                    # Op Windows werkt /dev/shm niet, dus daar gebruiken we gewoon een bestandje.
+                    # Op de Pi gebruiken we /dev/shm/ voor RAM-opslag.
+                    pad = '/dev/shm/energy_live.json' if os.path.exists('/dev/shm') else 'energy_live.json'
+                    
+                    try:
+                        with open(pad, 'w') as f:
+                            # We slaan de buffer op zodat de website die kan lezen
+                            json.dump(buffer_voor_db, f)
+                    except Exception as e:
+                        logging.error(f"Fout bij schrijven RAM-buffer: {e}")
+                    # =========================================================
+
                     logging.info(f"⏱️ Minuutmeting gebufferd: {prijs} (Tijdstip: {huidige_minuut_id})")
 
                 # 3. Status updates (Alarmen mogen wel direct afgaan)
