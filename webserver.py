@@ -1,9 +1,10 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect
 import sqlite3
 import pandas as pd
 import config
 import json
 import os
+import urllib.parse
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -84,7 +85,6 @@ def haal_live_data(datum_str=None):
 def haal_maand_data(gekozen_maand=None):
     """
     Haalt data op voor de maand-pagina.
-    Accepteert nu een filter (bv '2025-01').
     """
     try:
         if gekozen_maand is None:
@@ -100,17 +100,15 @@ def haal_maand_data(gekozen_maand=None):
         df = pd.read_sql_query(query, conn, params=(gekozen_maand,))
         conn.close()
         
-        # We voegen 'maand' toe aan de resultaten, zodat de HTML weet welke maand het is
         result = {"maand": gekozen_maand}
         
         if not df.empty:
             df['normaal'] = df['aantal'] - df['aantal_negatief'] - df['aantal_duur']
             df['gemist'] = (1440 - df['aantal']).clip(lower=0)
-            # We voegen de data toe aan dezelfde dictionary (flat structure)
             result.update(df.to_dict(orient='list'))
             return result
             
-        return result # Geeft { 'maand': '...' } terug, zelfs als er geen data is
+        return result
     except Exception as e:
         print(f"Error maand: {e}")
         return None
@@ -118,7 +116,6 @@ def haal_maand_data(gekozen_maand=None):
 def haal_jaar_data(gekozen_jaar=None):
     """
     Haalt data op voor de jaar-pagina.
-    Accepteert nu een filter (bv '2025').
     """
     try:
         if gekozen_jaar is None:
@@ -136,7 +133,6 @@ def haal_jaar_data(gekozen_jaar=None):
         df = pd.read_sql_query(query, conn, params=(gekozen_jaar,))
         conn.close()
         
-        # We voegen 'jaar' toe voor de HTML
         result = {"jaar": gekozen_jaar}
         
         if not df.empty:
@@ -158,28 +154,28 @@ def page_vandaag():
     gekozen_datum = request.args.get('datum') 
     data = haal_live_data(gekozen_datum)
     vandaag_str = datetime.now().strftime('%Y-%m-%d')
-    is_live = (data['datum'] == vandaag_str)
+    # Check of data bestaat voordat we de datum vergelijken
+    is_live = False
+    if data and 'datum' in data:
+        is_live = (data['datum'] == vandaag_str)
 
     return render_template('index.html', active_page='vandaag', data=data, is_live=is_live)
 
 @app.route('/maand')
 def page_maand():
-    # Haal de maand uit de URL (bv ?maand=2025-02)
     maand = request.args.get('maand') 
     return render_template('index.html', active_page='maand', history=haal_maand_data(maand))
 
 @app.route('/jaar')
 def page_jaar():
-    # Haal het jaar uit de URL (bv ?jaar=2024)
     jaar = request.args.get('jaar') 
     return render_template('index.html', active_page='jaar', year=haal_jaar_data(jaar))
 
 # --- NIEUWE ROUTE VOOR DE PWA ---
 @app.route('/sw.js')
 def serve_sw():
-    # Dit zorgt dat /sw.js bereikbaar is, maar haalt het bestand uit de static map
     return app.send_static_file('sw.js')
 
+
 if __name__ == '__main__':
-    # Zet debug op False voor publieke toegang
     app.run(host='0.0.0.0', port=5000, debug=False)
