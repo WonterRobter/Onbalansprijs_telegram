@@ -22,3 +22,4 @@ test_database.py
 *.db
 *.jpg
 *.png
+energy_live.json
