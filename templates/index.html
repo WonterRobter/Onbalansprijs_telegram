@@ -6,6 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Energy Monitor</title>
 
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}?v=2">
+    
+    <meta name="theme-color" content="#0E1117">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Energy">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo.png') }}">
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     
@@ -258,7 +267,7 @@
                                     }
                                 }
                             } 
-                        }s
+                        }
                     });
 
                     // --- 3. TELEGRAM GRAFIEK ---
@@ -436,6 +445,14 @@
             }
         });
         {% endif %}
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            // Let op: GEEN /static/ meer hiervoor!
+            navigator.serviceWorker.register("/sw.js")
+                .then(() => console.log("Service Worker Geregistreerd op root!"))
+                .catch((err) => console.log("Service Worker Fout:", err));
+        }
     </script>
 </body>
 </html>

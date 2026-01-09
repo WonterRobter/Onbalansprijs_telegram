@@ -174,6 +174,12 @@ def page_jaar():
     jaar = request.args.get('jaar') 
     return render_template('index.html', active_page='jaar', year=haal_jaar_data(jaar))
 
+# --- NIEUWE ROUTE VOOR DE PWA ---
+@app.route('/sw.js')
+def serve_sw():
+    # Dit zorgt dat /sw.js bereikbaar is, maar haalt het bestand uit de static map
+    return app.send_static_file('sw.js')
+
 if __name__ == '__main__':
     # Zet debug op False voor publieke toegang
     app.run(host='0.0.0.0', port=5000, debug=False)
