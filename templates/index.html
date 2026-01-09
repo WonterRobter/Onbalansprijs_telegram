@@ -3,17 +3,17 @@
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"> 
     <title>Energy Monitor</title>
 
-    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}?v=2">
-    
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}?v=7">
     <meta name="theme-color" content="#0E1117">
-    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Energy">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo.png') }}">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=1">
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -23,92 +23,13 @@
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/style.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/index.js"></script>
-
-    <style>
-        :root {
-            /* Streamlit Kleuren */
-            --bg-color: #0E1117;       
-            --sidebar-color: #262730;  
-            --card-color: #1E2129;     
-            --text-color: #FAFAFA;     
-            --secondary-text: #97989C; 
-            --accent: #00CC96;         
-            --red: #FF4B4B;            
-            --blue: #29B5E8;           
-        }
-
-        body {
-            margin: 0;
-            font-family: "Source Sans Pro", sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* --- SIDEBAR --- */
-        .sidebar {
-            width: 330px;
-            background-color: var(--sidebar-color);
-            padding: 2rem 1.5rem;
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid rgba(255,255,255,0.1);
-            overflow-y: auto;
-            flex-shrink: 0;
-        }
-
-        /* Zorgt dat de kalender mooi in de sidebar past */
-        .flatpickr-calendar.inline {
-            background: transparent !important;
-            box-shadow: none !important;
-            margin: 0 auto;
-        }
-
-        .sidebar h2 { font-size: 1.5rem; margin-top: 0; margin-bottom: 20px; font-weight: 600; }
-        .sidebar h3 { font-size: 0.9rem; color: var(--secondary-text); text-transform: uppercase; margin-top: 20px; margin-bottom: 10px; }
-        
-        .nav-item {
-            display: block; text-decoration: none; color: var(--text-color);
-            padding: 10px 15px; margin-bottom: 5px; border-radius: 5px; transition: background 0.2s; font-size: 1rem;
-        }
-        .nav-item:hover { background-color: rgba(255,255,255,0.1); }
-        .nav-item.active { background-color: rgba(100, 100, 100, 0.3); border-left: 4px solid var(--red); padding-left: 11px; }
-
-        .divider { border-top: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
-        .info-box { font-size: 0.9rem; color: var(--secondary-text); line-height: 1.6; }
-        .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
-
-        input[type="date"] {
-            background-color: #1e1e1e; color: white; border: 1px solid #444; padding: 10px; border-radius: 5px; width: 90%; font-family: inherit; cursor: pointer;
-        }
-        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
-
-        /* --- MAIN CONTENT --- */
-        .main { flex-grow: 1; padding: 2rem 3rem; overflow-y: auto; position: relative; }
-        h1 { margin-top: 0; font-size: 2.2rem; font-weight: 700; margin-bottom: 30px; }
-
-        .metrics-row { display: flex; gap: 1.5rem; margin-bottom: 2rem; flex-wrap: wrap; }
-        .metric-card { flex: 1; min-width: 200px; }
-        .metric-label { font-size: 0.9rem; color: var(--secondary-text); margin-bottom: 5px; }
-        .metric-val { font-size: 2.2rem; font-weight: 700; }
-        .metric-delta { font-size: 0.9rem; display: flex; align-items: center; gap: 0.4rem; margin-top: 5px; font-weight: 500;}
-        .delta-bad { color: var(--red); }
-        .delta-good { color: var(--accent); }
-
-        h4 { margin-top: 30px; margin-bottom: 10px; color: var(--secondary-text); font-weight: 400; font-size: 1rem; }
-        .chart-container { width: 100%; height: 400px; margin-bottom: 20px; }
-
-        .table-wrap { height: 400px; overflow-y: auto; border: 1px solid #444; border-radius: 4px; margin-top: 20px; }
-        table { width: 100%; border-collapse: collapse; }
-        th { position: sticky; top: 0; background: #1e1e1e; padding: 10px; text-align: left; color: var(--secondary-text); border-bottom: 1px solid #444; }
-        td { padding: 10px; border-bottom: 1px solid #333; font-size: 0.9rem; }
-    </style>
 </head>
 <body>
 
-    <div class="sidebar">
+    <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+    <button class="menu-btn" onclick="toggleMenu()">☰</button>
+
+    <div class="sidebar" id="sidebar">
         <h2>⚡ Bediening</h2>
         
         <h3>Navigatie</h3>
@@ -122,9 +43,9 @@
             <h3>Kies Datum</h3>
             <div id="datumKiezer"></div>
             <br>
-            <div style="font-size: 0.9rem; display: flex; align-items: center; gap: 10px;">
+            <div style="font-size: 0.9rem; display: flex; align-items: center; gap: 10px; padding-left: 10px;">
                 <input type="checkbox" id="autoRefreshToggle" {% if is_live %}checked{% endif %}> 
-                <span style="color: {% if is_live %}#fff{% else %}#666{% endif %};">Live Auto-Refresh (60s)</span>
+                <span style="color: {% if is_live %}#fff{% else %}#666{% endif %};">Live (60s)</span>
             </div>
         {% endif %}
 
@@ -135,13 +56,7 @@
 
         {% if active_page == 'jaar' and year %}
             <h3>Kies Jaar</h3>
-            <style>
-                /* Simpele styling voor de jaar-selectie */
-                .jaar-select { 
-                    background: #1e1e1e; color: white; border: 1px solid #444; 
-                    padding: 10px; width: 100%; border-radius: 5px; font-size: 1rem; cursor: pointer;
-                }
-            </style>
+            <style>.jaar-select { background: #1e1e1e; color: white; border: 1px solid #444; padding: 10px; width: 100%; border-radius: 5px; font-size: 1rem; cursor: pointer; }</style>
             <select class="jaar-select" onchange="window.location.href='/jaar?jaar='+this.value">
                 {% set huidig = year.jaar|int %}
                 {% for j in range(2024, huidig + 2) %}
@@ -153,7 +68,7 @@
         <div class="divider"></div>
 
         <h3>ℹ️ Info</h3>
-        <div class="info-box">
+        <div class="info-box" style="padding-left: 10px;">
             <div><span class="dot" style="background: var(--accent);"></span>Goedkoop: &lt; {{ config.GRENS_NEGATIEF }} €</div>
             <div><span class="dot" style="background: var(--red);"></span>Duur: &gt; {{ config.GRENS_DUUR }} €</div>
         </div>
@@ -166,10 +81,9 @@
             
             {% if data and not data.error %}
                 <div class="metrics-row">
-                    
                     {% if is_live %}
                     <div class="metric-card">
-                        <div class="metric-label">Prijs (Laatste meting)</div>
+                        <div class="metric-label">Prijs (Laatste)</div>
                         {% set prijs = data.huidig.waarde %}
                         <div class="metric-val" style="color: 
                             {% if prijs < data.stats.limits.negatief %}var(--accent)
@@ -186,21 +100,21 @@
                     {% endif %}
 
                     <div class="metric-card">
-                        <div class="metric-label">Gemiddeld deze dag</div>
+                        <div class="metric-label">Gemiddeld</div>
                         <div class="metric-val">€ {{ data.stats.gem }}</div>
                         {% if data.stats.avg_gisteren %}
                             {% if data.stats.delta_avg > 0 %}
-                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_avg }} vs Gisteren</div>
+                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_avg }} vs Gister</div>
                             {% else %}
-                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_avg }} vs Gisteren</div>
+                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_avg }} vs Gister</div>
                             {% endif %}
                         {% else %}
-                             <div class="metric-delta" style="color:#666">⚪ Geen data dag ervoor</div>
+                             <div class="metric-delta" style="color:#666">⚪ Geen data</div>
                         {% endif %}
                     </div>
 
                     <div class="metric-card">
-                        <div class="metric-label">Laagste / Hoogste</div>
+                        <div class="metric-label">Min / Max</div>
                         <div class="metric-val" style="font-size: 1.8rem;">
                             <span style="color:var(--accent)">{{ data.stats.min }}</span> / 
                             <span style="color:var(--red)">{{ data.stats.max }}</span>
@@ -208,33 +122,24 @@
                     </div>
                 </div>
 
-                <h4>Onbalansprijs Verloop (Minuutwaarden)</h4>
+                <h4>Onbalansprijs (Minuut)</h4>
                 <div class="chart-container">
                     <canvas id="liveChart"></canvas>
                 </div>
                 
-                <h4>Settlement Prijzen (Kwartierwaarden)</h4>
+                <h4>Settlement (Kwartier)</h4>
                 <div class="chart-container" style="height: 300px;">
                     <canvas id="teleChart"></canvas>
                 </div>
 
                 <script>
                     function veranderDatum(input) { window.location.href = '/?datum=' + input.value; }
-
-                    // --- 1. SETTINGS & PLUGINS ---
                     const grensDuur = {{ data.stats.limits.duur }};
-                    
                     const gridConfig = { color: (ctx) => (ctx.tick && ctx.tick.value === 0 ? '#FFFFFF' : '#333'), lineWidth: (ctx) => (ctx.tick && ctx.tick.value === 0 ? 2 : 1) };
-                    const yAxisConfig = { 
-                        grid: gridConfig, suggestedMin: -10, suggestedMax: 10, 
-                        ticks: { color: '#CCC', font: {weight:'bold'} }, border: {display:false} 
-                    };
-                    const xAxisConfig = { grid: { display: false }, ticks: { color: '#999', maxTicksLimit: 12 } };
+                    const yAxisConfig = { grid: gridConfig, suggestedMin: -10, suggestedMax: 10, ticks: { color: '#CCC', font: {weight:'bold'} }, border: {display:false} };
+                    const xAxisConfig = { grid: { display: false }, ticks: { color: '#999', maxTicksLimit: 8 } };
 
-                    // --- 2. LIVE GRAFIEK (Blauw -> Groen & Stippellijn) ---
                     const ctxLive = document.getElementById('liveChart').getContext('2d');
-                    
-                    // De Gradient (Blauwe Gloed)
                     const grad = ctxLive.createLinearGradient(0,0,0,400);
                     grad.addColorStop(0, 'rgba(41, 181, 232, 0.3)');
                     grad.addColorStop(1, 'rgba(41, 181, 232, 0)');
@@ -246,31 +151,21 @@
                             datasets: [{
                                 data: {{ data.full.prijzen|tojson }},
                                 borderColor: '#29B5E8', 
-                                segment: {
-                                    borderColor: ctx => ctx.p0.parsed.y < 0 && ctx.p1.parsed.y < 0 ? '#00CC96' : undefined
-                                },
-                                backgroundColor: grad, fill: true,
-                                borderWidth: 2, pointRadius: 0, tension: 0.3
+                                segment: { borderColor: ctx => ctx.p0.parsed.y < 0 && ctx.p1.parsed.y < 0 ? '#00CC96' : undefined },
+                                backgroundColor: grad, fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3
                             }]
                         },
                         options: { 
                             maintainAspectRatio: false, 
                             scales: { x: xAxisConfig, y: yAxisConfig },
-                            interaction: { mode: 'index', intersect: false }, // Soepele hover
+                            interaction: { mode: 'index', intersect: false },
                             plugins: {
                                 legend: {display:false},
-                                annotation: {
-                                    annotations: {
-                                        line1: {
-                                            type: 'line', yMin: grensDuur, yMax: grensDuur, borderColor: '#FF4B4B', borderWidth: 2, borderDash: [5, 5],
-                                        }
-                                    }
-                                }
+                                annotation: { annotations: { line1: { type: 'line', yMin: grensDuur, yMax: grensDuur, borderColor: '#FF4B4B', borderWidth: 2, borderDash: [5, 5] } } }
                             } 
                         }
                     });
 
-                    // --- 3. TELEGRAM GRAFIEK ---
                     const ctxTele = document.getElementById('teleChart').getContext('2d');
                     const gradTele = ctxTele.createLinearGradient(0,0,0,300);
                     gradTele.addColorStop(0, 'rgba(0, 204, 150, 0.3)');
@@ -286,35 +181,20 @@
                                 borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#00CC96', tension: 0
                             }]
                         },
-                        options: { 
-                            maintainAspectRatio: false, 
-                            scales: { x: xAxisConfig, y: yAxisConfig }, 
-                            interaction: { mode: 'index', intersect: false }, // Soepele hover
-                            plugins: {legend: {display:false}} 
-                        }
+                        options: { maintainAspectRatio: false, scales: { x: xAxisConfig, y: yAxisConfig }, interaction: { mode: 'index', intersect: false }, plugins: {legend: {display:false}} }
                     });
 
-                    // --- 4. AUTO REFRESH ---
                     let refreshTimer;
                     function startRefreshTimer() {
                         const toggle = document.getElementById('autoRefreshToggle');
-                        if (toggle && toggle.checked) {
-                            console.log("⏳ Refresh gestart (60s)...");
-                            refreshTimer = setTimeout(() => location.reload(), 60000);
-                        }
+                        if (toggle && toggle.checked) refreshTimer = setTimeout(() => location.reload(), 60000);
                     }
                     startRefreshTimer();
                     const toggleBtn = document.getElementById('autoRefreshToggle');
-                    if (toggleBtn) {
-                        toggleBtn.addEventListener('change', function() {
-                            if (this.checked) startRefreshTimer();
-                            else { console.log("⏸️ Gepauzeerd"); clearTimeout(refreshTimer); }
-                        });
-                    }
+                    if (toggleBtn) toggleBtn.addEventListener('change', function() { if (this.checked) startRefreshTimer(); else clearTimeout(refreshTimer); });
                 </script>
             {% else %}
                 <h2>Geen data gevonden voor {{ data.datum }}</h2>
-                <p>Kies een andere datum.</p>
                 <script>function veranderDatum(input) { window.location.href = '/?datum=' + input.value; }</script>
             {% endif %}
         {% endif %}
@@ -325,14 +205,14 @@
                 <div class="chart-container"><canvas id="barChart"></canvas></div>
                 <div class="table-wrap">
                     <table>
-                        <thead><tr><th>Datum</th><th>Gem</th><th>Min</th><th>Max</th><th>Negatief</th><th>Duur</th></tr></thead>
+                        <thead><tr><th>Datum</th><th>Gem</th><th>Min</th><th>Max</th><th>Neg</th><th>Duur</th></tr></thead>
                         <tbody>
                             {% for i in range(history.datum|length -1, -1, -1) %}
                             <tr>
                                 <td>{{ history.datum[i] }}</td>
                                 <td>€ {{ history.gemiddelde[i] }}</td>
-                                <td style="color:var(--accent)">€ {{ history.laagste[i] }}</td>
-                                <td style="color:var(--red)">€ {{ history.hoogste[i] }}</td>
+                                <td style="color:var(--accent)">{{ history.laagste[i] }}</td>
+                                <td style="color:var(--red)">{{ history.hoogste[i] }}</td>
                                 <td>{{ history.aantal_negatief[i] }}m</td>
                                 <td>{{ history.aantal_duur[i] }}m</td>
                             </tr>
@@ -352,16 +232,11 @@
                                 { label: 'Gemist', data: {{ history.gemist|tojson }}, backgroundColor: '#444' }
                             ]
                         },
-                        options: { 
-                            maintainAspectRatio: false, 
-                            interaction: { mode: 'index', intersect: false },
-                            scales: { x: {stacked:true, grid:{display:false}}, y: {stacked:true, grid:{color:'#333'}} } 
-                        }
+                        options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: {stacked:true, grid:{display:false}}, y: {stacked:true, grid:{color:'#333'}} } }
                     });
                 </script>
             {% else %}
-                <h2>Geen data gevonden voor {{ history.maand }}.</h2>
-                <p>Kies een andere maand in de zijbalk.</p>
+                <h2>Geen data.</h2>
             {% endif %}
         {% endif %}
 
@@ -377,80 +252,46 @@
                         type: 'bar',
                         data: {
                             labels: {{ year.maand|tojson }},
-                            datasets: [
-                                { label: 'Uren Negatief', data: {{ year.uren_negatief|tojson }}, backgroundColor: '#00CC96' },
-                                { label: 'Uren Duur', data: {{ year.uren_duur|tojson }}, backgroundColor: '#FF2B2B' }
-                            ]
+                            datasets: [{ label: 'Uren Negatief', data: {{ year.uren_negatief|tojson }}, backgroundColor: '#00CC96' }, { label: 'Uren Duur', data: {{ year.uren_duur|tojson }}, backgroundColor: '#FF2B2B' }]
                         },
-                        options: { 
-                            maintainAspectRatio: false, 
-                            interaction: { mode: 'index', intersect: false },
-                            scales: { x:{grid:{display:false}}, y: {grid:{color:'#333'}} } 
-                        }
+                        options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x:{grid:{display:false}}, y: {grid:{color:'#333'}} } }
                     });
                     new Chart(document.getElementById('priceYearChart'), {
                         type: 'line',
                         data: {
                             labels: {{ year.maand|tojson }},
-                            datasets: [
-                                { label: 'Gemiddelde', data: {{ year.gem_prijs|tojson }}, borderColor: '#FFA421', borderWidth: 3, tension: 0.2 },
-                                { label: 'Laagste', data: {{ year.laagste|tojson }}, borderColor: '#00CC96', borderDash: [5,5] },
-                                { label: 'Hoogste', data: {{ year.hoogste|tojson }}, borderColor: '#FF2B2B', borderDash: [5,5] }
-                            ]
+                            datasets: [{ label: 'Gemiddelde', data: {{ year.gem_prijs|tojson }}, borderColor: '#FFA421', borderWidth: 3, tension: 0.2 }, { label: 'Laagste', data: {{ year.laagste|tojson }}, borderColor: '#00CC96', borderDash: [5,5] }, { label: 'Hoogste', data: {{ year.hoogste|tojson }}, borderColor: '#FF2B2B', borderDash: [5,5] }]
                         },
-                        options: { 
-                            maintainAspectRatio: false, 
-                            interaction: { mode: 'index', intersect: false },
-                            scales: { x:{grid:{display:false}}, y: {grid:{color:'#333'}} } 
-                        }
+                        options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x:{grid:{display:false}}, y: {grid:{color:'#333'}} } }
                     });
                 </script>
             {% else %}
-                <h2>Geen data gevonden voor {{ year.jaar }}.</h2>
-                <p>Kies een ander jaar in de zijbalk.</p>
+                <h2>Geen data.</h2>
             {% endif %}
         {% endif %}
 
     </div> 
 
     <script>
-        // 1. DAG KIEZER
+        function toggleMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('overlay');
+            sidebar.classList.toggle('active');
+            if (sidebar.classList.contains('active')) { overlay.style.display = 'block'; } else { overlay.style.display = 'none'; }
+        }
+
         {% if active_page == 'vandaag' and data %}
-        flatpickr("#datumKiezer", {
-            inline: true,
-            dateFormat: "Y-m-d",
-            defaultDate: "{{ data.datum }}",
-            theme: "dark",
-            onChange: function(selectedDates, dateStr) {
-                window.location.href = '/?datum=' + dateStr;
-            }
-        });
+        flatpickr("#datumKiezer", { inline: true, dateFormat: "Y-m-d", defaultDate: "{{ data.datum }}", theme: "dark", onChange: function(selectedDates, dateStr) { window.location.href = '/?datum=' + dateStr; } });
         {% endif %}
 
-        // 2. MAAND KIEZER
         {% if active_page == 'maand' and history %}
-        flatpickr("#maandKiezer", {
-            inline: true,
-            plugins: [
-                new monthSelectPlugin({
-                    shorthand: true, // "Jan", "Feb"
-                    dateFormat: "Y-m",
-                    altFormat: "F Y", // "Januari 2025"
-                    theme: "dark"
-                })
-            ],
-            defaultDate: "{{ history.maand }}", 
-            onChange: function(selectedDates, dateStr) {
-                window.location.href = '/maand?maand=' + dateStr;
-            }
-        });
+        flatpickr("#maandKiezer", { inline: true, plugins: [ new monthSelectPlugin({ shorthand: true, dateFormat: "Y-m", altFormat: "F Y", theme: "dark" }) ], defaultDate: "{{ history.maand }}", onChange: function(selectedDates, dateStr) { window.location.href = '/maand?maand=' + dateStr; } });
         {% endif %}
     </script>
     <script>
         if ('serviceWorker' in navigator) {
-            // Let op: GEEN /static/ meer hiervoor!
-            navigator.serviceWorker.register("/sw.js")
-                .then(() => console.log("Service Worker Geregistreerd op root!"))
+            navigator.serviceWorker.register("/sw.js", { scope: '/' })
+                .then(() => console.log("Service Worker Geregistreerd!"))
                 .catch((err) => console.log("Service Worker Fout:", err));
         }
     </script>
