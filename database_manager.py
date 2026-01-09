@@ -35,6 +35,8 @@ def init_database():
             )
         ''')
         
+        c.execute('CREATE INDEX IF NOT EXISTS idx_detail_datum ON metingen_detail (datum)')
+        
         conn.commit()
         conn.close()
         logging.info("📚 Database tabellen gecontroleerd.")
@@ -92,16 +94,23 @@ def haal_vandaag_op(datum_str):
         return []
 
 def opruimen_oude_data():
-    """ Verwijdert detail-metingen ouder dan 1 maand """
+    """
+    AANGEPAST: We verwijderen niets meer!
+    We bewaren alle historie zodat de kalender op de website werkt.
+    """
     try:
-        grens = (datetime.now() - timedelta(days=config.AANTAL_DAGEN_BEWAREN)).strftime('%Y-%m-%d')
-        conn = sqlite3.connect(config.DB_BESTAND)
-        c = conn.cursor()
-        c.execute("DELETE FROM metingen_detail WHERE datum < ?", (grens,))
-        aantal = c.rowcount
-        conn.commit()
-        conn.close()
-        if aantal > 0:
-            logging.info(f"🧹 Opruiming: {aantal} oude metingen verwijderd.")
+        # Hieronder stond de code om data te verwijderen.
+        # Die hebben we uitgezet door er hekjes (#) voor te zetten.
+        
+        # grens = (datetime.now() - timedelta(days=config.AANTAL_DAGEN_BEWAREN)).strftime('%Y-%m-%d')
+        # conn = sqlite3.connect(config.DB_BESTAND)
+        # c = conn.cursor()
+        # c.execute("DELETE FROM metingen_detail WHERE datum < ?", (grens,))
+        # aantal = c.rowcount
+        # conn.commit()
+        # conn.close()
+        
+        logging.info("✨ Historie behouden (geen opschoning uitgevoerd).")
+        
     except Exception as e:
         logging.error(f"❌ Fout bij opruimen: {e}")

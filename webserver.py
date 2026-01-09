@@ -13,7 +13,6 @@ app = Flask(__name__)
 def haal_live_data(datum_str=None):
     """ 
     DATA VOOR: DAG DETAILS (Minuut per minuut) 
-    Als datum_str None is, pakken we vandaag.
     """
     try:
         if datum_str is None:
@@ -36,7 +35,7 @@ def haal_live_data(datum_str=None):
         
         conn.close()
         
-        # Alleen doen als we naar VANDAAG kijken
+        # Buffer uit RAM lezen (alleen voor Vandaag)
         vandaag_str = datetime.now().strftime('%Y-%m-%d')
         if datum_str == vandaag_str:
             pad = '/dev/shm/energy_live.json' if os.path.exists('/dev/shm') else 'energy_live.json'
@@ -44,17 +43,10 @@ def haal_live_data(datum_str=None):
                 try:
                     with open(pad, 'r') as f:
                         buffer_data = json.load(f)
-                        # Buffer data is: [[datum, tijd, waarde], ...]
-                        # We maken er een DataFrame van en plakken het vast
                         if buffer_data:
                             df_buffer = pd.DataFrame(buffer_data, columns=['datum', 'tijd', 'waarde'])
-                            # Alleen tijd en waarde zijn nodig
                             df_buffer = df_buffer[['tijd', 'waarde']]
-                            
-                            # Plakken aan de bestaande data (concat)
                             df = pd.concat([df, df_buffer], ignore_index=True)
-                            
-                            # Dubbele waarden verwijderen (voor de zekerheid)
                             df = df.drop_duplicates(subset=['tijd'], keep='last')
                 except Exception as e:
                     print(f"Kon buffer niet lezen: {e}")
@@ -70,7 +62,7 @@ def haal_live_data(datum_str=None):
                 delta_avg = gemiddelde_vandaag - avg_gisteren
             
             return {
-                "datum": datum_str, # We sturen de datum mee terug voor de titel
+                "datum": datum_str, 
                 "full": { "tijden": df['tijd'].tolist(), "prijzen": df['waarde'].tolist() },
                 "tele": { "tijden": tele_df['tijd'].tolist(), "prijzen": tele_df['waarde'].tolist() },
                 "huidig": df.iloc[-1].to_dict(),
@@ -84,69 +76,104 @@ def haal_live_data(datum_str=None):
                     "limits": { "duur": config.GRENS_DUUR, "negatief": config.GRENS_NEGATIEF }
                 }
             }
-        # Als er geen data is, sturen we toch de datum terug zodat de datumkiezer niet leeg is
         return {"datum": datum_str, "error": "Geen data"}
     except Exception as e: 
         print(f"Fout: {e}")
         return None
 
-def haal_maand_data():
+def haal_maand_data(gekozen_maand=None):
+    """
+    Haalt data op voor de maand-pagina.
+    Accepteert nu een filter (bv '2025-01').
+    """
     try:
+        if gekozen_maand is None:
+            gekozen_maand = datetime.now().strftime('%Y-%m')
+            
         conn = sqlite3.connect(config.DB_BESTAND)
-        df = pd.read_sql_query("SELECT * FROM dagstatistieken ORDER BY datum ASC LIMIT 31", conn)
+        # Filter op de specifieke maand
+        query = """
+            SELECT * FROM dagstatistieken 
+            WHERE strftime('%Y-%m', datum) = ? 
+            ORDER BY datum ASC
+        """
+        df = pd.read_sql_query(query, conn, params=(gekozen_maand,))
         conn.close()
+        
+        # We voegen 'maand' toe aan de resultaten, zodat de HTML weet welke maand het is
+        result = {"maand": gekozen_maand}
+        
         if not df.empty:
             df['normaal'] = df['aantal'] - df['aantal_negatief'] - df['aantal_duur']
             df['gemist'] = (1440 - df['aantal']).clip(lower=0)
-            return df.to_dict(orient='list')
+            # We voegen de data toe aan dezelfde dictionary (flat structure)
+            result.update(df.to_dict(orient='list'))
+            return result
+            
+        return result # Geeft { 'maand': '...' } terug, zelfs als er geen data is
+    except Exception as e:
+        print(f"Error maand: {e}")
         return None
-    except: return None
 
-def haal_jaar_data():
+def haal_jaar_data(gekozen_jaar=None):
+    """
+    Haalt data op voor de jaar-pagina.
+    Accepteert nu een filter (bv '2025').
+    """
     try:
+        if gekozen_jaar is None:
+            gekozen_jaar = datetime.now().strftime('%Y')
+
         conn = sqlite3.connect(config.DB_BESTAND)
         query = """
             SELECT strftime('%Y-%m', datum) as maand,
                    AVG(gemiddelde) as gem_prijs, MIN(laagste) as laagste, MAX(hoogste) as hoogste,
                    SUM(aantal_negatief) as som_negatief, SUM(aantal_duur) as som_duur
-            FROM dagstatistieken GROUP BY maand ORDER BY maand ASC LIMIT 12
+            FROM dagstatistieken 
+            WHERE strftime('%Y', datum) = ?
+            GROUP BY maand ORDER BY maand ASC
         """
-        df = pd.read_sql_query(query, conn)
+        df = pd.read_sql_query(query, conn, params=(gekozen_jaar,))
         conn.close()
+        
+        # We voegen 'jaar' toe voor de HTML
+        result = {"jaar": gekozen_jaar}
+        
         if not df.empty:
             df['uren_negatief'] = (df['som_negatief'] / 60).round(1)
             df['uren_duur'] = (df['som_duur'] / 60).round(1)
             df['gem_prijs'] = df['gem_prijs'].round(2)
-            return df.to_dict(orient='list')
+            result.update(df.to_dict(orient='list'))
+            return result
+            
+        return result
+    except Exception as e: 
+        print(f"Error jaar: {e}")
         return None
-    except: return None
 
 # --- ROUTES ---
 
 @app.route('/')
 def page_vandaag():
-    # We kijken of er een datum in de URL staat (bv: /?datum=2026-01-01)
     gekozen_datum = request.args.get('datum') 
-    
-    # Haal data op (als gekozen_datum None is, pakt de functie zelf Vandaag)
     data = haal_live_data(gekozen_datum)
-    
-    # Check of het VANDAAG is (voor de auto-refresh)
     vandaag_str = datetime.now().strftime('%Y-%m-%d')
     is_live = (data['datum'] == vandaag_str)
 
-    return render_template('index.html', 
-                           active_page='vandaag', 
-                           data=data, 
-                           is_live=is_live) # We vertellen de HTML of de refresh aan moet
+    return render_template('index.html', active_page='vandaag', data=data, is_live=is_live)
 
 @app.route('/maand')
 def page_maand():
-    return render_template('index.html', active_page='maand', history=haal_maand_data())
+    # Haal de maand uit de URL (bv ?maand=2025-02)
+    maand = request.args.get('maand') 
+    return render_template('index.html', active_page='maand', history=haal_maand_data(maand))
 
 @app.route('/jaar')
 def page_jaar():
-    return render_template('index.html', active_page='jaar', year=haal_jaar_data())
+    # Haal het jaar uit de URL (bv ?jaar=2024)
+    jaar = request.args.get('jaar') 
+    return render_template('index.html', active_page='jaar', year=haal_jaar_data(jaar))
 
 if __name__ == '__main__':
+    # Zet debug op False voor publieke toegang
     app.run(host='0.0.0.0', port=5000, debug=False)
