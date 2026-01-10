@@ -1,10 +1,9 @@
-from flask import Flask, render_template, jsonify, request, redirect
+from flask import Flask, render_template, jsonify, request
 import sqlite3
 import pandas as pd
 import config
 import json
 import os
-import urllib.parse
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -170,12 +169,6 @@ def page_maand():
 def page_jaar():
     jaar = request.args.get('jaar') 
     return render_template('index.html', active_page='jaar', year=haal_jaar_data(jaar))
-
-# --- NIEUWE ROUTE VOOR DE PWA ---
-@app.route('/sw.js')
-def serve_sw():
-    return app.send_static_file('sw.js')
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)

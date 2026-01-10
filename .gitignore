@@ -22,3 +22,5 @@ test_database.py
 *.db
 *.jpg
 *.png
+
+sw.js
