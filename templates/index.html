@@ -90,24 +90,24 @@
                             {% if prijs < data.stats.limits.negatief %}var(--accent)
                             {% elif prijs > data.stats.limits.duur %}var(--red)
                             {% else %}var(--text-color){% endif %};">
-                            € {{ prijs | round(2) }}
+                            € {{ prijs | int }}
                         </div>
                         {% if data.stats.delta_prijs > 0 %}
-                            <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_prijs }} vs Gem</div>
+                            <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_prijs | int }} vs Gem</div>
                         {% else %}
-                            <div class="metric-delta delta-good">▼ {{ data.stats.delta_prijs }} vs Gem</div>
+                            <div class="metric-delta delta-good">▼ {{ data.stats.delta_prijs | int }} vs Gem</div>
                         {% endif %}
                     </div>
                     {% endif %}
 
                     <div class="metric-card">
                         <div class="metric-label">Gemiddeld</div>
-                        <div class="metric-val">€ {{ data.stats.gem }}</div>
+                        <div class="metric-val">€ {{ data.stats.gem | int }}</div>
                         {% if data.stats.avg_gisteren %}
                             {% if data.stats.delta_avg > 0 %}
-                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_avg }} vs Gister</div>
+                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_avg | int }} vs Gister</div>
                             {% else %}
-                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_avg }} vs Gister</div>
+                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_avg | int }} vs Gister</div>
                             {% endif %}
                         {% else %}
                              <div class="metric-delta" style="color:#666">⚪ Geen data</div>
@@ -117,8 +117,8 @@
                     <div class="metric-card">
                         <div class="metric-label">Min / Max</div>
                         <div class="metric-val" style="font-size: 1.8rem;">
-                            <span style="color:var(--accent)">{{ data.stats.min }}</span> / 
-                            <span style="color:var(--red)">{{ data.stats.max }}</span>
+                            <span style="color:var(--accent)">{{ data.stats.min | int }}</span> / 
+                            <span style="color:var(--red)">{{ data.stats.max | int }}</span>
                         </div>
                     </div>
                 </div>
@@ -131,13 +131,13 @@
                 <div class="metrics-row" style="margin-top: 15px;">
                     <div class="metric-card">
                         <div class="metric-label">Gemiddeld (Kwartier)</div>
-                        <div class="metric-val">€ {{ data.stats.tele_gem }}</div>
+                        <div class="metric-val">€ {{ data.stats.tele_gem | int }}</div>
                         
                         {% if data.stats.avg_gisteren %}
                             {% if data.stats.delta_tele > 0 %}
-                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_tele }} vs Gister</div>
+                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_tele | int }} vs Gister</div>
                             {% else %}
-                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_tele }} vs Gister</div>
+                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_tele | int }} vs Gister</div>
                             {% endif %}
                         {% else %}
                              <div class="metric-delta" style="color:#666">⚪ Geen data</div>
@@ -147,8 +147,8 @@
                     <div class="metric-card">
                         <div class="metric-label">Min / Max (Kwartier)</div>
                         <div class="metric-val" style="font-size: 1.8rem;">
-                            <span style="color:var(--accent)">{{ data.stats.tele_min }}</span> / 
-                            <span style="color:var(--red)">{{ data.stats.tele_max }}</span>
+                            <span style="color:var(--accent)">{{ data.stats.tele_min | int }}</span> / 
+                            <span style="color:var(--red)">{{ data.stats.tele_max | int }}</span>
                         </div>
                     </div>
                 </div>
@@ -172,7 +172,13 @@
         {% if active_page == 'maand' %}
             <h1>Historiek ({{ history.maand }})</h1>
             {% if history and history.datum %}
+                
+                <h4>Uren per Categorie</h4>
                 <div class="chart-container"><canvas id="barChart"></canvas></div>
+                
+                <h4>Prijsontwikkeling</h4>
+                <div class="chart-container" style="height:300px"><canvas id="priceMonthChart"></canvas></div>
+
                 <div class="table-wrap">
                     <table>
                         <thead><tr><th>Datum</th><th>Gem</th><th>Min</th><th>Max</th><th>Neg</th><th>Duur</th></tr></thead>
@@ -180,9 +186,9 @@
                             {% for i in range(history.datum|length -1, -1, -1) %}
                             <tr>
                                 <td>{{ history.datum[i] }}</td>
-                                <td>€ {{ history.gemiddelde[i] }}</td>
-                                <td style="color:var(--accent)">{{ history.laagste[i] }}</td>
-                                <td style="color:var(--red)">{{ history.hoogste[i] }}</td>
+                                <td>€ {{ history.gemiddelde[i] | int }}</td>
+                                <td style="color:var(--accent)">{{ history.laagste[i] | int }}</td>
+                                <td style="color:var(--red)">{{ history.hoogste[i] | int }}</td>
                                 <td>{{ history.aantal_negatief[i] }}m</td>
                                 <td>{{ history.aantal_duur[i] }}m</td>
                             </tr>
@@ -203,6 +209,31 @@
                             ]
                         },
                         options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: {stacked:true, grid:{display:false}}, y: {stacked:true, grid:{color:'#333'}} } }
+                    });
+
+                    // NIEUWE MAAND GRAFIEK MET NUL LIJN
+                    new Chart(document.getElementById('priceMonthChart'), {
+                        type: 'line',
+                        data: {
+                            labels: {{ history.datum|tojson }},
+                            datasets: [
+                                { label: 'Gemiddelde', data: {{ history.gemiddelde|tojson }}, borderColor: '#FFA421', borderWidth: 3, tension: 0.2 },
+                                { label: 'Laagste', data: {{ history.laagste|tojson }}, borderColor: '#00CC96', borderDash: [5,5] },
+                                { label: 'Hoogste', data: {{ history.hoogste|tojson }}, borderColor: '#FF2B2B', borderDash: [5,5] }
+                            ]
+                        },
+                        options: { 
+                            maintainAspectRatio: false, 
+                            interaction: { mode: 'index', intersect: false }, 
+                            scales: { x:{grid:{display:false}}, y: {grid:{color:'#333'}} },
+                            plugins: {
+                                annotation: { 
+                                    annotations: { 
+                                        zeroLine: { type: 'line', yMin: 0, yMax: 0, borderColor: 'rgba(255, 255, 255, 0.6)', borderWidth: 2 } 
+                                    } 
+                                }
+                            }
+                        }
                     });
                 </script>
             {% else %}
@@ -232,7 +263,18 @@
                             labels: {{ year.maand|tojson }},
                             datasets: [{ label: 'Gemiddelde', data: {{ year.gem_prijs|tojson }}, borderColor: '#FFA421', borderWidth: 3, tension: 0.2 }, { label: 'Laagste', data: {{ year.laagste|tojson }}, borderColor: '#00CC96', borderDash: [5,5] }, { label: 'Hoogste', data: {{ year.hoogste|tojson }}, borderColor: '#FF2B2B', borderDash: [5,5] }]
                         },
-                        options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x:{grid:{display:false}}, y: {grid:{color:'#333'}} } }
+                        options: { 
+                            maintainAspectRatio: false, 
+                            interaction: { mode: 'index', intersect: false }, 
+                            scales: { x:{grid:{display:false}}, y: {grid:{color:'#333'}} },
+                            plugins: {
+                                annotation: { 
+                                    annotations: { 
+                                        zeroLine: { type: 'line', yMin: 0, yMax: 0, borderColor: 'rgba(255, 255, 255, 0.6)', borderWidth: 2 } 
+                                    } 
+                                }
+                            }
+                        }
                     });
                 </script>
             {% else %}

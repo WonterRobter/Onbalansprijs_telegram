@@ -25,10 +25,19 @@ function initGrafieken(liveData, teleData, limits) {
 
     const grensDuur = limits.duur;
     
-    // Instellingen
+    // Algemene instellingen
     const gridConfig = { color: (ctx) => (ctx.tick && ctx.tick.value === 0 ? '#FFFFFF' : '#333'), lineWidth: (ctx) => (ctx.tick && ctx.tick.value === 0 ? 2 : 1) };
     const yAxisConfig = { grid: gridConfig, suggestedMin: -10, suggestedMax: 10, ticks: { color: '#CCC', font: {weight:'bold'} }, border: {display:false} };
     const xAxisConfig = { grid: { display: false }, ticks: { color: '#999', maxTicksLimit: 8 } };
+
+    // Configuratie voor de NUL-LIJN (Wit en duidelijk)
+    const zeroLineConfig = {
+        type: 'line',
+        yMin: 0,
+        yMax: 0,
+        borderColor: 'rgba(255, 255, 255, 0.6)', // Wit met beetje transparantie
+        borderWidth: 2,
+    };
 
     // --- Live Grafiek ---
     const ctxLive = canvasLive.getContext('2d');
@@ -53,7 +62,12 @@ function initGrafieken(liveData, teleData, limits) {
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: {display:false},
-                annotation: { annotations: { line1: { type: 'line', yMin: grensDuur, yMax: grensDuur, borderColor: '#FF4B4B', borderWidth: 2, borderDash: [5, 5] } } }
+                annotation: { 
+                    annotations: { 
+                        line1: { type: 'line', yMin: grensDuur, yMax: grensDuur, borderColor: '#FF4B4B', borderWidth: 2, borderDash: [5, 5] },
+                        lineZero: zeroLineConfig // <--- HIER IS DE NUL LIJN
+                    } 
+                }
             } 
         }
     });
@@ -78,7 +92,14 @@ function initGrafieken(liveData, teleData, limits) {
             maintainAspectRatio: false, 
             scales: { x: xAxisConfig, y: yAxisConfig }, 
             interaction: { mode: 'index', intersect: false }, 
-            plugins: {legend: {display:false}} 
+            plugins: {
+                legend: {display:false},
+                annotation: { 
+                    annotations: { 
+                        lineZero: zeroLineConfig // <--- OOK HIER DE NUL LIJN
+                    } 
+                }
+            } 
         }
     });
 }

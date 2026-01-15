@@ -75,19 +75,19 @@ def haal_live_data(datum_str=None):
                 "tele": { "tijden": tele_df['tijd'].tolist(), "prijzen": tele_df['waarde'].tolist() },
                 "huidig": df.iloc[-1].to_dict(),
                 "stats": { 
-                    "gem": round(gemiddelde_vandaag, 2), 
-                    "min": round(df['waarde'].min(), 2), 
-                    "max": round(df['waarde'].max(), 2), 
-                    "delta_prijs": round(delta_prijs, 2),
-                    "delta_avg": round(delta_avg, 2),
+                    # Alles naar INT (geheel getal)
+                    "gem": int(round(gemiddelde_vandaag)), 
+                    "min": int(round(df['waarde'].min())), 
+                    "max": int(round(df['waarde'].max())), 
+                    "delta_prijs": int(round(delta_prijs)),
+                    "delta_avg": int(round(delta_avg)),
                     "avg_gisteren": avg_gisteren,
                     "limits": { "duur": config.GRENS_DUUR, "negatief": config.GRENS_NEGATIEF },
                     
-                    # Nieuwe Kwartier Data
-                    "tele_gem": tele_gem,
-                    "tele_min": tele_min,
-                    "tele_max": tele_max,
-                    "delta_tele": round(delta_tele, 2)
+                    "tele_gem": int(round(tele_gem)),
+                    "tele_min": int(round(tele_min)),
+                    "tele_max": int(round(tele_max)),
+                    "delta_tele": int(round(delta_tele))
                 }
             }
         return {"datum": datum_str, "error": "Geen data"}
@@ -118,6 +118,11 @@ def haal_maand_data(gekozen_maand=None):
         if not df.empty:
             df['normaal'] = df['aantal'] - df['aantal_negatief'] - df['aantal_duur']
             df['gemist'] = (1440 - df['aantal']).clip(lower=0)
+            
+            df['gemiddelde'] = df['gemiddelde'].round(0).astype(int)
+            df['laagste'] = df['laagste'].round(0).astype(int)
+            df['hoogste'] = df['hoogste'].round(0).astype(int)
+            
             result.update(df.to_dict(orient='list'))
             return result
             
@@ -149,9 +154,12 @@ def haal_jaar_data(gekozen_jaar=None):
         result = {"jaar": gekozen_jaar}
         
         if not df.empty:
-            df['uren_negatief'] = (df['som_negatief'] / 60).round(1)
+            df['uren_negatief'] = (df['som_negatief'] / 60).round(1) # Uren mogen wel 1 decimaal houden
             df['uren_duur'] = (df['som_duur'] / 60).round(1)
-            df['gem_prijs'] = df['gem_prijs'].round(2)
+            
+            # Prijs naar geheel getal
+            df['gem_prijs'] = df['gem_prijs'].round(0).astype(int)
+            
             result.update(df.to_dict(orient='list'))
             return result
             

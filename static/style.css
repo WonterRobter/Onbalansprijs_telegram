@@ -134,4 +134,36 @@ td { padding: 10px; border-bottom: 1px solid #333; font-size: 0.9rem; }
     .metrics-row { gap: 1rem; }
     .metric-card { min-width: 100%; } 
     .chart-container { height: 300px; } 
+
+    .table-wrap {
+        overflow-x: hidden;
+    }
+
+    table {
+        width: 100%;
+        table-layout: fixed;
+    }
+
+    th:first-child, td:first-child {
+        width: 18%;           /* Smalle kolom */
+        font-size: 0.8rem;    /* Kleiner lettertype */
+        text-align: left;
+        color: #999;          /* Iets grijzer zodat het minder opvalt */
+        white-space: nowrap;  /* Datum niet afbreken */
+        padding: 8px 2px;
+    }
+
+    /* 2. De CIJFER kolommen (De rest) */
+    th:not(:first-child), td:not(:first-child) {
+        width: 16.4%;         /* De resterende 82% verdeeld over 5 kolommen */
+        font-size: 0.85rem;   /* Groter en duidelijker lettertype */
+        text-align: center;
+        padding: 8px 2px;
+    }
+    
+    /* Zorg dat de headers ook goed staan */
+    th {
+        font-size: 0.7rem !important; /* Headers mogen klein blijven */
+        text-transform: uppercase;
+    }
 }
