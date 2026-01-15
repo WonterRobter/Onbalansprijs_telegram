@@ -11,9 +11,6 @@ app = Flask(__name__)
 # --- DATABANK FUNCTIES ---
 
 def haal_live_data(datum_str=None):
-    """ 
-    DATA VOOR: DAG DETAILS (Minuut per minuut) 
-    """
     try:
         if datum_str is None:
             datum_str = datetime.now().strftime('%Y-%m-%d')
@@ -32,7 +29,6 @@ def haal_live_data(datum_str=None):
         cursor.execute("SELECT gemiddelde FROM dagstatistieken WHERE datum = ?", (gisteren_str,))
         row = cursor.fetchone()
         avg_gisteren = row[0] if row else None
-        
         conn.close()
         
         # Buffer uit RAM lezen (alleen voor Vandaag)
@@ -52,10 +48,7 @@ def haal_live_data(datum_str=None):
                     print(f"Kon buffer niet lezen: {e}")
         
         if not df.empty:
-            # Filter de kwartierwaardes (Settlement)
-            tele_df = df[df['tijd'].str.endswith(('14','29','44','59'))]
-            
-            # 1. BEREKEN MINUUT STATS (Bestaand)
+            # Minuut statistieken
             huidige_prijs = df.iloc[-1]['waarde']
             gemiddelde_vandaag = df['waarde'].mean()
             delta_prijs = huidige_prijs - gemiddelde_vandaag
@@ -63,16 +56,18 @@ def haal_live_data(datum_str=None):
             delta_avg = 0
             if avg_gisteren is not None:
                 delta_avg = gemiddelde_vandaag - avg_gisteren
+
+            # Kwartier (Settlement) statistieken
+            tele_df = df[df['tijd'].str.endswith(('14','29','44','59'))]
             
-            # 2. BEREKEN KWARTIER (SETTLEMENT) STATS (Nieuw!)
             if not tele_df.empty:
                 tele_gem = round(tele_df['waarde'].mean(), 2)
                 tele_min = round(tele_df['waarde'].min(), 2)
                 tele_max = round(tele_df['waarde'].max(), 2)
-            else:
-                tele_gem = 0
-                tele_min = 0
-                tele_max = 0
+                # NIEUW: Verschil berekenen (Kwartier Gem vs Dag Gem)
+                delta_tele = tele_gem - gemiddelde_vandaag
+                if avg_gisteren is not None:
+                    delta_tele = tele_gem - avg_gisteren
 
             return {
                 "datum": datum_str, 
@@ -80,7 +75,6 @@ def haal_live_data(datum_str=None):
                 "tele": { "tijden": tele_df['tijd'].tolist(), "prijzen": tele_df['waarde'].tolist() },
                 "huidig": df.iloc[-1].to_dict(),
                 "stats": { 
-                    # Minuut stats
                     "gem": round(gemiddelde_vandaag, 2), 
                     "min": round(df['waarde'].min(), 2), 
                     "max": round(df['waarde'].max(), 2), 
@@ -89,10 +83,11 @@ def haal_live_data(datum_str=None):
                     "avg_gisteren": avg_gisteren,
                     "limits": { "duur": config.GRENS_DUUR, "negatief": config.GRENS_NEGATIEF },
                     
-                    # Kwartier stats (Nieuw)
+                    # Nieuwe Kwartier Data
                     "tele_gem": tele_gem,
                     "tele_min": tele_min,
-                    "tele_max": tele_max
+                    "tele_max": tele_max,
+                    "delta_tele": round(delta_tele, 2)
                 }
             }
         return {"datum": datum_str, "error": "Geen data"}

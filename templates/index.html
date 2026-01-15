@@ -132,6 +132,16 @@
                     <div class="metric-card">
                         <div class="metric-label">Gemiddeld (Kwartier)</div>
                         <div class="metric-val">€ {{ data.stats.tele_gem }}</div>
+                        
+                        {% if data.stats.avg_gisteren %}
+                            {% if data.stats.delta_tele > 0 %}
+                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_tele }} vs Gister</div>
+                            {% else %}
+                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_tele }} vs Gister</div>
+                            {% endif %}
+                        {% else %}
+                             <div class="metric-delta" style="color:#666">⚪ Geen data</div>
+                        {% endif %}
                     </div>
 
                     <div class="metric-card">
