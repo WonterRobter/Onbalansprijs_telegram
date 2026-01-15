@@ -52,7 +52,10 @@ def haal_live_data(datum_str=None):
                     print(f"Kon buffer niet lezen: {e}")
         
         if not df.empty:
+            # Filter de kwartierwaardes (Settlement)
             tele_df = df[df['tijd'].str.endswith(('14','29','44','59'))]
+            
+            # 1. BEREKEN MINUUT STATS (Bestaand)
             huidige_prijs = df.iloc[-1]['waarde']
             gemiddelde_vandaag = df['waarde'].mean()
             delta_prijs = huidige_prijs - gemiddelde_vandaag
@@ -61,19 +64,35 @@ def haal_live_data(datum_str=None):
             if avg_gisteren is not None:
                 delta_avg = gemiddelde_vandaag - avg_gisteren
             
+            # 2. BEREKEN KWARTIER (SETTLEMENT) STATS (Nieuw!)
+            if not tele_df.empty:
+                tele_gem = round(tele_df['waarde'].mean(), 2)
+                tele_min = round(tele_df['waarde'].min(), 2)
+                tele_max = round(tele_df['waarde'].max(), 2)
+            else:
+                tele_gem = 0
+                tele_min = 0
+                tele_max = 0
+
             return {
                 "datum": datum_str, 
                 "full": { "tijden": df['tijd'].tolist(), "prijzen": df['waarde'].tolist() },
                 "tele": { "tijden": tele_df['tijd'].tolist(), "prijzen": tele_df['waarde'].tolist() },
                 "huidig": df.iloc[-1].to_dict(),
                 "stats": { 
+                    # Minuut stats
                     "gem": round(gemiddelde_vandaag, 2), 
                     "min": round(df['waarde'].min(), 2), 
                     "max": round(df['waarde'].max(), 2), 
                     "delta_prijs": round(delta_prijs, 2),
                     "delta_avg": round(delta_avg, 2),
                     "avg_gisteren": avg_gisteren,
-                    "limits": { "duur": config.GRENS_DUUR, "negatief": config.GRENS_NEGATIEF }
+                    "limits": { "duur": config.GRENS_DUUR, "negatief": config.GRENS_NEGATIEF },
+                    
+                    # Kwartier stats (Nieuw)
+                    "tele_gem": tele_gem,
+                    "tele_min": tele_min,
+                    "tele_max": tele_max
                 }
             }
         return {"datum": datum_str, "error": "Geen data"}

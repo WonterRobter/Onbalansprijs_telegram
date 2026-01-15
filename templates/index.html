@@ -125,8 +125,23 @@
 
                 <h4>Onbalansprijs (Minuut)</h4>
                 <div class="chart-container"><canvas id="liveChart"></canvas></div>
-                <h4>Settlement (Kwartier)</h4>
+                <h4>Kwartierwaarde (Kwartier)</h4>
                 <div class="chart-container" style="height: 300px;"><canvas id="teleChart"></canvas></div>
+                
+                <div class="metrics-row" style="margin-top: 15px;">
+                    <div class="metric-card">
+                        <div class="metric-label">Gemiddeld (Kwartier)</div>
+                        <div class="metric-val">€ {{ data.stats.tele_gem }}</div>
+                    </div>
+
+                    <div class="metric-card">
+                        <div class="metric-label">Min / Max (Kwartier)</div>
+                        <div class="metric-val" style="font-size: 1.8rem;">
+                            <span style="color:var(--accent)">{{ data.stats.tele_min }}</span> / 
+                            <span style="color:var(--red)">{{ data.stats.tele_max }}</span>
+                        </div>
+                    </div>
+                </div>
 
                 <script>
                     document.addEventListener('DOMContentLoaded', function() {
