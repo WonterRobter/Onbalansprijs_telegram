@@ -90,24 +90,24 @@
                             {% if prijs < data.stats.limits.negatief %}var(--accent)
                             {% elif prijs > data.stats.limits.duur %}var(--red)
                             {% else %}var(--text-color){% endif %};">
-                            € {{ prijs | int }}
+                            € {{ prijs | round(2) }}
                         </div>
                         {% if data.stats.delta_prijs > 0 %}
-                            <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_prijs | int }} vs Gem</div>
+                            <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_prijs }} vs Gem</div>
                         {% else %}
-                            <div class="metric-delta delta-good">▼ {{ data.stats.delta_prijs | int }} vs Gem</div>
+                            <div class="metric-delta delta-good">▼ {{ data.stats.delta_prijs }} vs Gem</div>
                         {% endif %}
                     </div>
                     {% endif %}
 
                     <div class="metric-card">
                         <div class="metric-label">Gemiddeld</div>
-                        <div class="metric-val">€ {{ data.stats.gem | int }}</div>
+                        <div class="metric-val">€ {{ data.stats.gem }}</div>
                         {% if data.stats.avg_gisteren %}
                             {% if data.stats.delta_avg > 0 %}
-                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_avg | int }} vs Gister</div>
+                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_avg }} vs Gister</div>
                             {% else %}
-                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_avg | int }} vs Gister</div>
+                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_avg }} vs Gister</div>
                             {% endif %}
                         {% else %}
                              <div class="metric-delta" style="color:#666">⚪ Geen data</div>
@@ -117,8 +117,8 @@
                     <div class="metric-card">
                         <div class="metric-label">Min / Max</div>
                         <div class="metric-val" style="font-size: 1.8rem;">
-                            <span style="color:var(--accent)">{{ data.stats.min | int }}</span> / 
-                            <span style="color:var(--red)">{{ data.stats.max | int }}</span>
+                            <span style="color:var(--accent)">{{ data.stats.min }}</span> / 
+                            <span style="color:var(--red)">{{ data.stats.max }}</span>
                         </div>
                     </div>
                 </div>
@@ -131,13 +131,13 @@
                 <div class="metrics-row" style="margin-top: 15px;">
                     <div class="metric-card">
                         <div class="metric-label">Gemiddeld (Kwartier)</div>
-                        <div class="metric-val">€ {{ data.stats.tele_gem | int }}</div>
+                        <div class="metric-val">€ {{ data.stats.tele_gem }}</div>
                         
                         {% if data.stats.avg_gisteren %}
                             {% if data.stats.delta_tele > 0 %}
-                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_tele | int }} vs Gister</div>
+                                <div class="metric-delta delta-bad">▲ +{{ data.stats.delta_tele }} vs Gister</div>
                             {% else %}
-                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_tele | int }} vs Gister</div>
+                                <div class="metric-delta delta-good">▼ {{ data.stats.delta_tele }} vs Gister</div>
                             {% endif %}
                         {% else %}
                              <div class="metric-delta" style="color:#666">⚪ Geen data</div>
@@ -147,8 +147,8 @@
                     <div class="metric-card">
                         <div class="metric-label">Min / Max (Kwartier)</div>
                         <div class="metric-val" style="font-size: 1.8rem;">
-                            <span style="color:var(--accent)">{{ data.stats.tele_min | int }}</span> / 
-                            <span style="color:var(--red)">{{ data.stats.tele_max | int }}</span>
+                            <span style="color:var(--accent)">{{ data.stats.tele_min }}</span> / 
+                            <span style="color:var(--red)">{{ data.stats.tele_max }}</span>
                         </div>
                     </div>
                 </div>
@@ -211,7 +211,6 @@
                         options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { x: {stacked:true, grid:{display:false}}, y: {stacked:true, grid:{color:'#333'}} } }
                     });
 
-                    // NIEUWE MAAND GRAFIEK MET NUL LIJN
                     new Chart(document.getElementById('priceMonthChart'), {
                         type: 'line',
                         data: {
@@ -285,7 +284,6 @@
     </div> 
 
     <script>
-        // 1. DAG KIEZER
         {% if active_page == 'vandaag' and data %}
         flatpickr("#datumKiezer", {
             inline: true,
@@ -298,7 +296,6 @@
         });
         {% endif %}
 
-        // 2. MAAND KIEZER
         {% if active_page == 'maand' and history %}
         flatpickr("#maandKiezer", {
             inline: true,

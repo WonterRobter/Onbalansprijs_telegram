@@ -15,23 +15,19 @@ def haal_live_data(datum_str=None):
         if datum_str is None:
             datum_str = datetime.now().strftime('%Y-%m-%d')
         
-        # We moeten weten wat 'gisteren' was ten opzichte van de GEKOZEN datum
         gekozen_datum = datetime.strptime(datum_str, '%Y-%m-%d')
         gisteren_str = (gekozen_datum - timedelta(days=1)).strftime('%Y-%m-%d')
 
         conn = sqlite3.connect(config.DB_BESTAND)
-        
-        # 1. Haal data van de GEKOZEN datum
         df = pd.read_sql_query("SELECT tijd, waarde FROM metingen_detail WHERE datum = ? ORDER BY tijd ASC", conn, params=(datum_str,))
         
-        # 2. Haal gemiddelde van de dag ERVOOR
         cursor = conn.cursor()
         cursor.execute("SELECT gemiddelde FROM dagstatistieken WHERE datum = ?", (gisteren_str,))
         row = cursor.fetchone()
         avg_gisteren = row[0] if row else None
         conn.close()
         
-        # Buffer uit RAM lezen (alleen voor Vandaag)
+        # Buffer lezen
         vandaag_str = datetime.now().strftime('%Y-%m-%d')
         if datum_str == vandaag_str:
             pad = '/dev/shm/energy_live.json' if os.path.exists('/dev/shm') else 'energy_live.json'
@@ -48,7 +44,7 @@ def haal_live_data(datum_str=None):
                     print(f"Kon buffer niet lezen: {e}")
         
         if not df.empty:
-            # Minuut statistieken
+            # Stats berekenen (TERUG NAAR ROUND 2, GEEN INT)
             huidige_prijs = df.iloc[-1]['waarde']
             gemiddelde_vandaag = df['waarde'].mean()
             delta_prijs = huidige_prijs - gemiddelde_vandaag
@@ -57,17 +53,17 @@ def haal_live_data(datum_str=None):
             if avg_gisteren is not None:
                 delta_avg = gemiddelde_vandaag - avg_gisteren
 
-            # Kwartier (Settlement) statistieken
             tele_df = df[df['tijd'].str.endswith(('14','29','44','59'))]
             
+            delta_tele = 0
             if not tele_df.empty:
                 tele_gem = round(tele_df['waarde'].mean(), 2)
                 tele_min = round(tele_df['waarde'].min(), 2)
                 tele_max = round(tele_df['waarde'].max(), 2)
-                # NIEUW: Verschil berekenen (Kwartier Gem vs Dag Gem)
-                delta_tele = tele_gem - gemiddelde_vandaag
                 if avg_gisteren is not None:
                     delta_tele = tele_gem - avg_gisteren
+            else:
+                tele_gem = 0; tele_min = 0; tele_max = 0
 
             return {
                 "datum": datum_str, 
@@ -75,19 +71,18 @@ def haal_live_data(datum_str=None):
                 "tele": { "tijden": tele_df['tijd'].tolist(), "prijzen": tele_df['waarde'].tolist() },
                 "huidig": df.iloc[-1].to_dict(),
                 "stats": { 
-                    # Alles naar INT (geheel getal)
-                    "gem": int(round(gemiddelde_vandaag)), 
-                    "min": int(round(df['waarde'].min())), 
-                    "max": int(round(df['waarde'].max())), 
-                    "delta_prijs": int(round(delta_prijs)),
-                    "delta_avg": int(round(delta_avg)),
+                    "gem": round(gemiddelde_vandaag, 2), 
+                    "min": round(df['waarde'].min(), 2), 
+                    "max": round(df['waarde'].max(), 2), 
+                    "delta_prijs": round(delta_prijs, 2),
+                    "delta_avg": round(delta_avg, 2),
                     "avg_gisteren": avg_gisteren,
                     "limits": { "duur": config.GRENS_DUUR, "negatief": config.GRENS_NEGATIEF },
                     
-                    "tele_gem": int(round(tele_gem)),
-                    "tele_min": int(round(tele_min)),
-                    "tele_max": int(round(tele_max)),
-                    "delta_tele": int(round(delta_tele))
+                    "tele_gem": tele_gem,
+                    "tele_min": tele_min,
+                    "tele_max": tele_max,
+                    "delta_tele": round(delta_tele, 2)
                 }
             }
         return {"datum": datum_str, "error": "Geen data"}
@@ -96,20 +91,12 @@ def haal_live_data(datum_str=None):
         return None
 
 def haal_maand_data(gekozen_maand=None):
-    """
-    Haalt data op voor de maand-pagina.
-    """
     try:
         if gekozen_maand is None:
             gekozen_maand = datetime.now().strftime('%Y-%m')
             
         conn = sqlite3.connect(config.DB_BESTAND)
-        # Filter op de specifieke maand
-        query = """
-            SELECT * FROM dagstatistieken 
-            WHERE strftime('%Y-%m', datum) = ? 
-            ORDER BY datum ASC
-        """
+        query = "SELECT * FROM dagstatistieken WHERE strftime('%Y-%m', datum) = ? ORDER BY datum ASC"
         df = pd.read_sql_query(query, conn, params=(gekozen_maand,))
         conn.close()
         
@@ -118,11 +105,7 @@ def haal_maand_data(gekozen_maand=None):
         if not df.empty:
             df['normaal'] = df['aantal'] - df['aantal_negatief'] - df['aantal_duur']
             df['gemist'] = (1440 - df['aantal']).clip(lower=0)
-            
-            df['gemiddelde'] = df['gemiddelde'].round(0).astype(int)
-            df['laagste'] = df['laagste'].round(0).astype(int)
-            df['hoogste'] = df['hoogste'].round(0).astype(int)
-            
+            # GEEN AFRONDING HIER MEER
             result.update(df.to_dict(orient='list'))
             return result
             
